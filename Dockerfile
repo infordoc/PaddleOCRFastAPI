@@ -7,6 +7,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 
 # 安装系统依赖
+# PaddleOCR 3.x with PaddlePaddle 3.0+ requires these system libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libgl1 \
@@ -19,6 +20,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖
+# Installs PaddleOCR 3.x (3.4.0) with PaddlePaddle 3.0+ (3.2.0)
 RUN python3 -m pip install --upgrade pip && \
     pip3 install -r requirements.txt
 

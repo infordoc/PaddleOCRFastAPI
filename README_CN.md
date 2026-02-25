@@ -136,6 +136,13 @@ API 文档：`/docs`
 
 详情请参阅 [PaddleOCR 3.x 升级文档](https://github.com/PaddlePaddle/PaddleOCR/blob/main/doc/doc_ch/paddleocr_3x_upgrade_cn.md)
 
+## 文档
+
+- 📖 [快速参考指南](QUICK_REFERENCE.md) - 快速命令和示例
+- 📋 [迁移指南](MIGRATION_GUIDE.md) - 从 2.x 迁移到 3.x 的详细说明
+- 📝 [更新日志](CHANGELOG.md) - 完整的变更列表
+- 💡 [使用示例](examples_paddleocr_3x.py) - 3.x 功能代码示例
+
 ## 开发路线图
 
 - [x] 支持 PaddleOCR v3.x (PP-OCRv5)

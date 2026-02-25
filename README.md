@@ -159,6 +159,13 @@ If you're upgrading from PaddleOCR 2.x:
 
 For more details, see the [PaddleOCR 3.x Upgrade Documentation](https://github.com/PaddlePaddle/PaddleOCR/blob/main/doc/doc_en/paddleocr_3x_upgrade_en.md)
 
+## Documentation
+
+- 📖 [Quick Reference Guide](QUICK_REFERENCE.md) - Quick commands and examples
+- 📋 [Migration Guide](MIGRATION_GUIDE.md) - Detailed migration from 2.x to 3.x
+- 📝 [Changelog](CHANGELOG.md) - Complete list of changes
+- 💡 [Usage Examples](examples_paddleocr_3x.py) - Code examples for 3.x features
+
 ## Roadmap
 
 - [x] Support PaddleOCR v3.x (PP-OCRv5)
