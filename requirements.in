@@ -1,9 +1,15 @@
+# Web Framework
 FastAPI
-paddlepaddle
-paddleocr
 uvicorn
 python-multipart
+
+# PaddleOCR 3.x with PaddlePaddle 3.0+
+# https://github.com/PaddlePaddle/PaddleOCR
+paddlepaddle>=3.0.0
+paddleocr>=3.0.0
+
+# Core dependencies
 requests
 numpy
 opencv-python
-PyMuPDF
+PyMuPDF>=1.23.0
