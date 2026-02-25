@@ -14,10 +14,11 @@ from bs4 import BeautifulSoup
 
 try:
     from paddleocr import PPStructureV3
-    print("✓ PPStructureV3 导入成功")
+    print("✓ PPStructureV3 导入成功 (PaddleOCR 3.x)")
 except ImportError as e:
     print(f"✗ PPStructureV3 导入失败: {e}")
-    print("提示：可能需要安装 paddleocr>=3.0.0")
+    print("提示：需要 PaddleOCR 3.x 版本")
+    print("请运行: pip install paddleocr>=3.0.0")
     exit(1)
 
 # 全局实例
@@ -25,13 +26,17 @@ _table_engine = None
 
 def get_table_engine():
     """
-    获取 PP-StructureV3 表格识别实例 (单例模式)
-    使用专业的表格识别模块
+    获取 PPStructureV3 表格识别实例 (单例模式)
+    
+    PPStructureV3 是 PaddleOCR 3.x 的版面分析和表格识别模块，
+    相比 2.x 的 PPStructure 提供更好的性能和准确性。
+    
+    使用表格识别最小配置（禁用文档预处理与版面分析）
     """
     global _table_engine
     if _table_engine is None:
         print("\n正在初始化 PPStructureV3 引擎...")
-        print("使用表格识别最小配置（禁用文档预处理与版面分析）")
+        print("使用 PaddleOCR 3.x 表格识别功能（禁用文档预处理）")
         
         try:
             # PPStructureV3 是 PaddleOCR 3.x 的版面分析和表格识别模块
@@ -45,7 +50,7 @@ def get_table_engine():
                 use_formula_recognition=False,
                 use_region_detection=False
             )
-            print("✓ PPStructureV3 引擎初始化成功\n")
+            print("✓ PPStructureV3 引擎初始化成功 (PaddleOCR 3.x)\n")
         except Exception as e:
             print(f"✗ PPStructureV3 引擎初始化失败: {e}\n")
             raise
@@ -263,7 +268,7 @@ def process_pdf_file(pdf_path: str):
 
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("PPStructure 表格识别测试")
+    print("PPStructureV3 表格识别测试 (PaddleOCR 3.x)")
     print("="*60)
     
     # 测试文件路径（请根据实际情况修改）

@@ -14,6 +14,8 @@ OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "ch")
 
 router = APIRouter(prefix="/ocr", tags=["OCR"])
 
+# Initialize PaddleOCR 3.x with PP-OCRv5 models
+# Using the unified predict() interface introduced in PaddleOCR 3.x
 ocr = PaddleOCR(
     text_detection_model_name="PP-OCRv5_mobile_det",
     text_recognition_model_name="PP-OCRv5_mobile_rec",
@@ -31,12 +33,19 @@ def _np_to_list(value):
 
 def extract_ocr_data(result):
     """
-    从 PaddleOCR predict 返回结构中提取所需字段:
-    只返回数组形式: [{ 'input_path': str, 'rec_texts': list[str], 'rec_boxes': list }]
+    从 PaddleOCR 3.x predict 返回结构中提取所需字段
+    
+    PaddleOCR 3.x 返回格式说明：
+    - 统一的 predict() 接口返回 OCRResult 对象列表
+    - 每个结果包含 rec_texts, rec_boxes, rec_scores, input_path 等属性
+    - 相比 2.x 的嵌套列表结构更清晰易用
+    
+    返回格式: [{ 'input_path': str, 'rec_texts': list[str], 'rec_boxes': list }]
+    
     支持以下几种可能格式:
     1. {'res': {...}}  # 单个结果
     2. [{'res': {...}}, {'res': {...}}]  # 多页结果
-    3. 旧格式: list 内元素具备属性 input_path / rec_texts / rec_boxes
+    3. OCRResult 对象: 具备属性 input_path / rec_texts / rec_boxes
     4. 直接是 dict {...}
     """
 

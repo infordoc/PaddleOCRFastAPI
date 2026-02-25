@@ -34,12 +34,12 @@ _pdf_ocr = None
 
 def get_pdf_ocr():
     """
-    获取 PaddleOCR 实例（单例模式）
+    获取 PaddleOCR 3.x 实例（单例模式）
     
     采用延迟初始化策略，只在第一次调用时创建 OCR 实例，
     避免服务启动时加载模型导致启动变慢。
     
-    模型配置：
+    模型配置（PaddleOCR 3.x 使用 PP-OCRv5）：
         - 文本检测：PP-OCRv5_mobile_det（轻量级检测模型）
         - 文本识别：PP-OCRv5_mobile_rec（轻量级识别模型）
         - 角度分类：启用（自动校正文字方向）
@@ -51,6 +51,7 @@ def get_pdf_ocr():
     """
     global _pdf_ocr
     if _pdf_ocr is None:
+        # PaddleOCR 3.x unified interface with PP-OCRv5 models
         _pdf_ocr = PaddleOCR(
             text_detection_model_name="PP-OCRv5_mobile_det",  # 文本检测模型
             text_recognition_model_name="PP-OCRv5_mobile_rec",  # 文本识别模型
@@ -288,18 +289,18 @@ def reconstruct_table(texts, boxes, y_threshold=30, min_cols=3):
 
 def extract_pdf_ocr_data(result, page_num):
     """
-    从 OCR 识别结果中提取表格数据，非表格页面返回 None
+    从 PaddleOCR 3.x 识别结果中提取表格数据，非表格页面返回 None
     
     处理流程：
-    1. 兼容性处理：支持 OCRResult 对象和普通列表两种返回格式
+    1. 兼容性处理：支持 PaddleOCR 3.x OCRResult 对象和列表格式
     2. 数据提取：从结果中分离文本列表和边界框坐标列表
     3. 表格重建：调用 reconstruct_table() 算法尝试识别表格结构
     4. 结果筛选：只返回包含有效表格的页面数据
     
     Args:
-        result: PaddleOCR 识别结果，两种格式之一：
-            - OCRResult 对象：包含 boxes 和 rec_text 属性
-            - 列表格式：[[box, (text, score)], ...]
+        result: PaddleOCR 3.x 识别结果，格式为：
+            - OCRResult 对象：包含 rec_texts, rec_boxes, rec_scores 等属性
+            - 列表格式：[OCRResult] 或传统格式兼容
         page_num (int): PDF 页码，从 1 开始编号
     
     Returns:
@@ -316,10 +317,10 @@ def extract_pdf_ocr_data(result, page_num):
             
         如果未检测到表格，返回 None（该页将被过滤）
     
-    OCRResult 兼容性说明：
-        - PaddleOCR 2.6+ 返回 OCRResult 对象（包含boxes, rec_text, rec_score等属性）
-        - 旧版本返回嵌套列表格式
-        - 本函数使用 hasattr() 自动检测并兼容两种格式
+    PaddleOCR 3.x 兼容性说明：
+        - PaddleOCR 3.x 返回 OCRResult 对象（包含 rec_texts, rec_boxes, rec_scores 等属性）
+        - 使用统一的 predict() 接口，结果结构更清晰
+        - 本函数使用 hasattr() 自动检测并兼容不同格式
     
     示例：
         >>> result = ocr.predict('page1.png')
