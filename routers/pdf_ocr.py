@@ -44,30 +44,30 @@ def get_pdf_ocr(detection_model: Optional[str] = None, recognition_model: Option
     避免服务启动时加载模型导致启动变慢。
     
     Args:
-        detection_model: 检测模型名称 (默认: PP-OCRv5_mobile_det)
-        recognition_model: 识别模型名称 (默认: PP-OCRv5_mobile_rec)
+        detection_model: 检测模型名称 (默认: PP-OCRv5_server_det)
+        recognition_model: 识别模型名称 (默认: PP-OCRv5_server_rec)
     
     模型配置（PaddleOCR 3.x）：
         检测模型:
-            - PP-OCRv5_mobile_det (默认，轻量级)
-            - PP-OCRv5_server_det (服务器版，更准确)
+            - PP-OCRv5_server_det (默认，更准确)
+            - PP-OCRv5_mobile_det (轻量级，更快)
             - PP-OCRv4_mobile_det (v4轻量级)
             - PP-OCRv4_server_det (v4服务器版)
         
         识别模型:
-            - PP-OCRv5_mobile_rec (默认，轻量级)
-            - PP-OCRv5_server_rec (服务器版，更准确)
+            - PP-OCRv5_server_rec (默认，更准确)
+            - PP-OCRv5_mobile_rec (轻量级，更快)
             - PP-OCRv4_mobile_rec (v4轻量级)
             - PP-OCRv4_server_rec (v4服务器版)
     
     Returns:
         PaddleOCR: OCR 实例对象
     """
-    # 使用默认模型
+    # 使用默认模型 - Server 版本更准确
     if not detection_model:
-        detection_model = "PP-OCRv5_mobile_det"
+        detection_model = "PP-OCRv5_server_det"
     if not recognition_model:
-        recognition_model = "PP-OCRv5_mobile_rec"
+        recognition_model = "PP-OCRv5_server_rec"
     
     # 创建缓存键
     cache_key = f"{detection_model}_{recognition_model}_{OCR_LANGUAGE}"

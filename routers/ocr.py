@@ -10,6 +10,8 @@ import os
 import tempfile
 import numpy as np
 from typing import Optional
+import fitz  # PyMuPDF - para processar PDF
+import base64
 
 OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "ch")
 
@@ -23,30 +25,30 @@ def get_ocr_instance(detection_model: Optional[str] = None, recognition_model: O
     获取或创建 PaddleOCR 实例（支持模型选择）
     
     Args:
-        detection_model: 检测模型名称 (默认: PP-OCRv5_mobile_det)
-        recognition_model: 识别模型名称 (默认: PP-OCRv5_mobile_rec)
+        detection_model: 检测模型名称 (默认: PP-OCRv5_server_det)
+        recognition_model: 识别模型名称 (默认: PP-OCRv5_server_rec)
     
     可用模型:
         检测模型:
-            - PP-OCRv5_mobile_det (默认，轻量级)
-            - PP-OCRv5_server_det (服务器版，更准确)
+            - PP-OCRv5_server_det (默认，更准确)
+            - PP-OCRv5_mobile_det (轻量级，更快)
             - PP-OCRv4_mobile_det (v4轻量级)
             - PP-OCRv4_server_det (v4服务器版)
         
         识别模型:
-            - PP-OCRv5_mobile_rec (默认，轻量级)
-            - PP-OCRv5_server_rec (服务器版，更准确)
+            - PP-OCRv5_server_rec (默认，更准确)
+            - PP-OCRv5_mobile_rec (轻量级，更快)
             - PP-OCRv4_mobile_rec (v4轻量级)
             - PP-OCRv4_server_rec (v4服务器版)
     
     Returns:
         PaddleOCR: OCR 实例
     """
-    # 使用默认模型
+    # 使用默认模型 - Server 版本更准确
     if not detection_model:
-        detection_model = "PP-OCRv5_mobile_det"
+        detection_model = "PP-OCRv5_server_det"
     if not recognition_model:
-        recognition_model = "PP-OCRv5_mobile_rec"
+        recognition_model = "PP-OCRv5_server_rec"
     
     # 创建缓存键
     cache_key = f"{detection_model}_{recognition_model}_{OCR_LANGUAGE}"
@@ -255,3 +257,214 @@ async def predict_by_url(
     restfulModel = RestfulModel(
         resultcode=200, message="Success", data=result_data)
     return restfulModel
+
+
+def pdf_to_images(pdf_path: str):
+    """
+    将 PDF 文档的每一页转换为图像，用于 OCR 处理
+    
+    Args:
+        pdf_path: PDF 文件路径
+    
+    Returns:
+        list: 包含每页图像信息的列表 [{'page_num': int, 'path': str}, ...]
+    """
+    temp_files = []
+    pdf_document = fitz.open(pdf_path)
+    
+    for page_num in range(len(pdf_document)):
+        page = pdf_document[page_num]
+        mat = fitz.Matrix(2.0, 2.0)  # 2倍放大提高识别率
+        pix = page.get_pixmap(matrix=mat)
+        
+        # 保存为临时图像文件
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_img:
+            pix.save(tmp_img.name)
+            temp_files.append({
+                'page_num': page_num + 1,
+                'path': tmp_img.name
+            })
+    
+    pdf_document.close()
+    return temp_files
+
+
+@router.post('/pdf-predict-by-file', response_model=RestfulModel, summary="识别上传的PDF文件（全文OCR）")
+async def pdf_predict_by_file(
+    file: UploadFile,
+    detection_model: Optional[str] = Query(None, description="检测模型"),
+    recognition_model: Optional[str] = Query(None, description="识别模型")
+):
+    """
+    上传 PDF 文件并对每一页进行 OCR 文本识别
+    
+    与 /pdf/predict-by-file 的区别：
+    - 本接口返回完整的 OCR 文本识别结果
+    - /pdf/predict-by-file 仅提取表格数据
+    
+    Args:
+        file: PDF 文件
+        detection_model: 检测模型（可选）
+        recognition_model: 识别模型（可选）
+    
+    Returns:
+        RestfulModel: 包含每页 OCR 识别结果的响应
+    """
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请上传PDF格式的文件"
+        )
+    
+    # 读取文件内容
+    file_bytes = await file.read()
+    
+    # 保存为临时PDF文件
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_pdf:
+        tmp_pdf.write(file_bytes)
+        tmp_pdf_path = tmp_pdf.name
+    
+    try:
+        # 将 PDF 转换为图像
+        image_files = pdf_to_images(tmp_pdf_path)
+        
+        # 获取 OCR 实例
+        ocr_instance = get_ocr_instance(detection_model, recognition_model)
+        
+        # 对每页进行 OCR 识别
+        all_results = []
+        for img_info in image_files:
+            try:
+                result = ocr_instance.predict(input=img_info['path'])
+                page_data = extract_ocr_data(result)
+                
+                # 添加页码信息
+                if page_data and len(page_data) > 0:
+                    page_data[0]['page'] = img_info['page_num']
+                    all_results.extend(page_data)
+            except Exception as e:
+                # 即使某页失败，也继续处理其他页
+                all_results.append({
+                    'page': img_info['page_num'],
+                    'error': str(e),
+                    'rec_texts': [],
+                    'rec_boxes': []
+                })
+        
+        restfulModel = RestfulModel(
+            resultcode=200,
+            message=f"Success: {file.filename}, 处理了 {len(image_files)} 页",
+            data=all_results
+        )
+        return restfulModel
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF识别失败: {str(e)}"
+        )
+    
+    finally:
+        # 删除临时文件
+        if 'image_files' in locals():
+            for img_info in image_files:
+                try:
+                    os.unlink(img_info['path'])
+                except Exception:
+                    pass
+        
+        try:
+            os.unlink(tmp_pdf_path)
+        except Exception:
+            pass
+
+
+@router.post('/pdf-predict-by-base64', response_model=RestfulModel, summary="识别 Base64 PDF（全文OCR）")
+async def pdf_predict_by_base64(
+    pdf_model: PDFBase64PostModel
+):
+    """
+    通过 Base64 编码识别 PDF 文件的全部文本
+    
+    与 /pdf/predict-by-base64 的区别：
+    - 本接口返回完整的 OCR 文本识别结果
+    - /pdf/predict-by-base64 仅提取表格数据
+    
+    Args:
+        pdf_model: 包含 base64_str 和可选模型参数的请求体
+    
+    Returns:
+        RestfulModel: 包含每页 OCR 识别结果的响应
+    """
+    try:
+        # 移除可能的 data URI scheme prefix
+        base64_str = pdf_model.base64_str
+        if ',' in base64_str and base64_str.startswith('data:'):
+            base64_str = base64_str.split(',', 1)[1]
+        
+        # 解码 Base64
+        pdf_content = base64.b64decode(base64_str)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Base64 解码失败: {str(e)}"
+        )
+    
+    # 保存为临时PDF文件
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_pdf:
+        tmp_pdf.write(pdf_content)
+        tmp_pdf_path = tmp_pdf.name
+    
+    try:
+        # 将 PDF 转换为图像
+        image_files = pdf_to_images(tmp_pdf_path)
+        
+        # 获取 OCR 实例
+        ocr_instance = get_ocr_instance(pdf_model.detection_model, pdf_model.recognition_model)
+        
+        # 对每页进行 OCR 识别
+        all_results = []
+        for img_info in image_files:
+            try:
+                result = ocr_instance.predict(input=img_info['path'])
+                page_data = extract_ocr_data(result)
+                
+                # 添加页码信息
+                if page_data and len(page_data) > 0:
+                    page_data[0]['page'] = img_info['page_num']
+                    all_results.extend(page_data)
+            except Exception as e:
+                # 即使某页失败，也继续处理其他页
+                all_results.append({
+                    'page': img_info['page_num'],
+                    'error': str(e),
+                    'rec_texts': [],
+                    'rec_boxes': []
+                })
+        
+        restfulModel = RestfulModel(
+            resultcode=200,
+            message=f"Success: 处理了 {len(image_files)} 页",
+            data=all_results
+        )
+        return restfulModel
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF识别失败: {str(e)}"
+        )
+    
+    finally:
+        # 删除临时文件
+        if 'image_files' in locals():
+            for img_info in image_files:
+                try:
+                    os.unlink(img_info['path'])
+                except Exception:
+                    pass
+        
+        try:
+            os.unlink(tmp_pdf_path)
+        except Exception:
+            pass
