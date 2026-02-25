@@ -3,17 +3,19 @@
 PDF OCR 路由模块
 
 功能：从 PDF 文档中提取表格数据
-- 支持通过 URL 或上传文件的方式处理 PDF
+- 支持通过 URL、上传文件或 Base64 的方式处理 PDF
 - 自动检测并提取 PDF 中的表格结构
 - 基于文本位置坐标智能重建表格的行列关系
 - 返回结构化的表格数据（表头 + 数据行）
+- 支持自定义 OCR 模型选择
 
 作者：PaddleOCR FastAPI
-版本：1.0
+版本：2.0
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, UploadFile, status, Query
 from models.RestfulModel import *
+from models.OCRModel import PDFBase64PostModel
 from paddleocr import PaddleOCR
 import requests
 import os
@@ -22,6 +24,8 @@ import fitz  # PyMuPDF - PDF处理库
 import numpy as np
 from PIL import Image
 import io
+import base64
+from typing import Optional
 
 # 从环境变量获取 OCR 语言配置，默认为中文
 OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "ch")
@@ -29,38 +33,64 @@ OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "ch")
 # 创建路由器，所有接口前缀为 /pdf
 router = APIRouter(prefix="/pdf", tags=["PDF OCR"])
 
-# 全局 OCR 实例（延迟初始化，节省启动时间）
-_pdf_ocr = None
+# OCR 实例缓存（支持不同模型配置）
+_pdf_ocr_instances = {}
 
-def get_pdf_ocr():
+def get_pdf_ocr(detection_model: Optional[str] = None, recognition_model: Optional[str] = None):
     """
-    获取 PaddleOCR 3.x 实例（单例模式）
+    获取 PaddleOCR 3.x 实例（单例模式，支持模型选择）
     
     采用延迟初始化策略，只在第一次调用时创建 OCR 实例，
     避免服务启动时加载模型导致启动变慢。
     
-    模型配置（PaddleOCR 3.x 使用 PP-OCRv5）：
-        - 文本检测：PP-OCRv5_mobile_det（轻量级检测模型）
-        - 文本识别：PP-OCRv5_mobile_rec（轻量级识别模型）
-        - 角度分类：启用（自动校正文字方向）
-        - 文档方向分类：禁用（减少处理时间）
-        - 文档图像矫正：禁用（减少处理时间）
+    Args:
+        detection_model: 检测模型名称 (默认: PP-OCRv5_mobile_det)
+        recognition_model: 识别模型名称 (默认: PP-OCRv5_mobile_rec)
+    
+    模型配置（PaddleOCR 3.x）：
+        检测模型:
+            - PP-OCRv5_mobile_det (默认，轻量级)
+            - PP-OCRv5_server_det (服务器版，更准确)
+            - PP-OCRv4_mobile_det (v4轻量级)
+            - PP-OCRv4_server_det (v4服务器版)
+        
+        识别模型:
+            - PP-OCRv5_mobile_rec (默认，轻量级)
+            - PP-OCRv5_server_rec (服务器版，更准确)
+            - PP-OCRv4_mobile_rec (v4轻量级)
+            - PP-OCRv4_server_rec (v4服务器版)
     
     Returns:
         PaddleOCR: OCR 实例对象
     """
-    global _pdf_ocr
-    if _pdf_ocr is None:
-        # PaddleOCR 3.x unified interface with PP-OCRv5 models
-        _pdf_ocr = PaddleOCR(
-            text_detection_model_name="PP-OCRv5_mobile_det",  # 文本检测模型
-            text_recognition_model_name="PP-OCRv5_mobile_rec",  # 文本识别模型
-            use_angle_cls=True,  # 启用角度分类器
-            use_doc_orientation_classify=False,  # 禁用文档方向分类
-            use_doc_unwarping=False,  # 禁用文档矫正
-            lang=OCR_LANGUAGE  # 语言设置
-        )
-    return _pdf_ocr
+    # 使用默认模型
+    if not detection_model:
+        detection_model = "PP-OCRv5_mobile_det"
+    if not recognition_model:
+        recognition_model = "PP-OCRv5_mobile_rec"
+    
+    # 创建缓存键
+    cache_key = f"{detection_model}_{recognition_model}_{OCR_LANGUAGE}"
+    
+    # 如果实例已存在，直接返回
+    if cache_key in _pdf_ocr_instances:
+        return _pdf_ocr_instances[cache_key]
+    
+    # 创建新实例
+    # PaddleOCR 3.x unified interface with customizable models
+    ocr_instance = PaddleOCR(
+        text_detection_model_name=detection_model,  # 文本检测模型
+        text_recognition_model_name=recognition_model,  # 文本识别模型
+        use_angle_cls=True,  # 启用角度分类器
+        use_doc_orientation_classify=False,  # 禁用文档方向分类
+        use_doc_unwarping=False,  # 禁用文档矫正
+        lang=OCR_LANGUAGE  # 语言设置
+    )
+    
+    # 缓存实例
+    _pdf_ocr_instances[cache_key] = ocr_instance
+    
+    return ocr_instance
 
 
 def pdf_to_images(pdf_path: str):
@@ -378,8 +408,41 @@ def extract_pdf_ocr_data(result, page_num):
         return None
 
 
+def process_pdf(pdf_path: str, detection_model: Optional[str] = None, recognition_model: Optional[str] = None):
+    """
+    处理 PDF 文件并提取表格
+    
+    Args:
+        pdf_path: PDF 文件路径
+        detection_model: 检测模型名称
+        recognition_model: 识别模型名称
+    
+    Returns:
+        tuple: (all_results, image_files) - 提取结果和临时图像文件列表
+    """
+    # 将 PDF 转换为图像文件
+    image_files = pdf_to_images(pdf_path)
+    
+    # 获取 OCR 实例
+    ocr = get_pdf_ocr(detection_model, recognition_model)
+    
+    # 对每个页面进行 OCR 识别，只保留包含表格的页面
+    all_results = []
+    for img_info in image_files:
+        result = ocr.predict(input=img_info['path'])
+        page_data = extract_pdf_ocr_data(result, img_info['page_num'])
+        if page_data is not None:  # 只添加包含表格的页面
+            all_results.append(page_data)
+    
+    return all_results, image_files
+
+
 @router.get('/predict-by-url', response_model=RestfulModel, summary="识别PDF URL")
-async def predict_pdf_by_url(pdf_url: str):
+async def predict_pdf_by_url(
+    pdf_url: str,
+    detection_model: Optional[str] = Query(None, description="检测模型"),
+    recognition_model: Optional[str] = Query(None, description="识别模型")
+):
     """
     通过 URL 下载并识别 PDF 文件中的表格数据
     
@@ -389,13 +452,15 @@ async def predict_pdf_by_url(pdf_url: str):
     1. 参数验证：检查 URL 格式是否有效
     2. 文件下载：通过 HTTP 请求下载 PDF 文件到临时目录
     3. PDF 转图：将 PDF 每一页转换为高分辨率图像（2x）
-    4. OCR 识别：对每页图像执行文字识别
+    4. OCR 识别：对每页图像执行文字识别（可选择模型）
     5. 表格重建：使用坐标算法识别表格结构
     6. 结果过滤：只返回包含表格的页面
     7. 资源清理：删除临时文件
     
     Args:
         pdf_url (str): PDF 文件的 URL 地址，支持 http/https 协议
+        detection_model (str, optional): 检测模型名称
+        recognition_model (str, optional): 识别模型名称
     
     Returns:
         RestfulModel: 统一格式的 JSON 响应
@@ -462,19 +527,8 @@ async def predict_pdf_by_url(pdf_url: str):
         tmp_pdf_path = tmp_file.name
     
     try:
-        # 将 PDF 转换为图像文件
-        image_files = pdf_to_images(tmp_pdf_path)
-        
-        # 获取 OCR 实例
-        ocr = get_pdf_ocr()
-        
-        # 对每个页面进行 OCR 识别，只保留包含表格的页面
-        all_results = []
-        for img_info in image_files:
-            result = ocr.predict(input=img_info['path'])
-            page_data = extract_pdf_ocr_data(result, img_info['page_num'])
-            if page_data is not None:  # 只添加包含表格的页面
-                all_results.append(page_data)
+        # 处理 PDF
+        all_results, image_files = process_pdf(tmp_pdf_path, detection_model, recognition_model)
         
         # 计算总表格数
         total_tables = len(all_results)
@@ -509,26 +563,20 @@ async def predict_pdf_by_url(pdf_url: str):
 
 
 @router.post('/predict-by-file', response_model=RestfulModel, summary="识别上传的PDF文件")
-async def predict_pdf_by_file(file: UploadFile):
+async def predict_pdf_by_file(
+    file: UploadFile,
+    detection_model: Optional[str] = Query(None, description="检测模型"),
+    recognition_model: Optional[str] = Query(None, description="识别模型")
+):
     """
     上传 PDF 文件并识别其中的表格数据
     
     API 端点：POST /pdf/predict-by-file
     
-    工作流程：
-    1. 文件验证：检查文件是否为空、格式是否为 PDF
-    2. 文件保存：将上传的文件保存到临时目录
-    3. PDF 转图：将 PDF 每一页转换为高分辨率图像（2x）
-    4. OCR 识别：对每页图像执行文字识别
-    5. 表格重建：使用坐标算法识别表格结构
-    6. 结果过滤：只返回包含表格的页面
-    7. 资源清理：删除临时文件（上传文件 + 图像文件）
-    
     Args:
         file (UploadFile): 通过表单上传的 PDF 文件
-            - Content-Type: multipart/form-data
-            - 字段名：file
-            - 文件类型：application/pdf
+        detection_model (str, optional): 检测模型名称
+        recognition_model (str, optional): 识别模型名称
     
     Returns:
         RestfulModel: 统一格式的 JSON 响应
@@ -604,19 +652,8 @@ async def predict_pdf_by_file(file: UploadFile):
         tmp_pdf_path = tmp_file.name
     
     try:
-        # 将 PDF 转换为图像文件
-        image_files = pdf_to_images(tmp_pdf_path)
-        
-        # 获取 OCR 实例
-        ocr = get_pdf_ocr()
-        
-        # 对每个页面进行 OCR 识别，只保留包含表格的页面
-        all_results = []
-        for img_info in image_files:
-            result = ocr.predict(input=img_info['path'])
-            page_data = extract_pdf_ocr_data(result, img_info['page_num'])
-            if page_data is not None:  # 只添加包含表格的页面
-                all_results.append(page_data)
+        # 处理 PDF
+        all_results, image_files = process_pdf(tmp_pdf_path, detection_model, recognition_model)
         
         # 计算总表格数
         total_tables = len(all_results)
@@ -624,6 +661,153 @@ async def predict_pdf_by_file(file: UploadFile):
         restfulModel = RestfulModel(
             resultcode=200,
             message=f"Success: {file.filename}, 提取到 {total_tables} 个表格",
+            data=all_results
+        )
+        return restfulModel
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF识别失败: {str(e)}"
+        )
+    
+    finally:
+        # 删除临时图片文件
+        if 'image_files' in locals():
+            for img_info in image_files:
+                try:
+                    os.unlink(img_info['path'])
+                except Exception:
+                    pass
+        
+        # 删除临时PDF文件
+        try:
+            os.unlink(tmp_pdf_path)
+        except Exception:
+            pass
+
+
+@router.post('/predict-by-base64', response_model=RestfulModel, summary="识别 Base64 PDF")
+async def predict_pdf_by_base64(pdf_model: PDFBase64PostModel):
+    """
+    通过 Base64 编码识别 PDF 文件中的表格数据
+    
+    API 端点：POST /pdf/predict-by-base64
+    
+    工作流程：
+    1. Base64 解码：将 Base64 字符串解码为 PDF 二进制数据
+    2. 文件保存：将解码后的数据保存到临时文件
+    3. PDF 转图：将 PDF 每一页转换为高分辨率图像（2x）
+    4. OCR 识别：对每页图像执行文字识别（可选择模型）
+    5. 表格重建：使用坐标算法识别表格结构
+    6. 结果过滤：只返回包含表格的页面
+    7. 资源清理：删除所有临时文件
+    
+    Args:
+        pdf_model (PDFBase64PostModel): 包含 base64_str 的请求体
+            - base64_str: PDF 文件的 Base64 编码字符串
+            - detection_model (optional): 检测模型名称
+            - recognition_model (optional): 识别模型名称
+    
+    Returns:
+        RestfulModel: 统一格式的 JSON 响应
+            成功时 (200):
+            {
+                "resultcode": 200,
+                "message": "Success: 提取到 N 个表格",
+                "data": [
+                    {
+                        "page": 1,
+                        "table": {
+                            "headers": ["列1", "列2", "列3"],
+                            "rows": [["值1", "值2", "值3"], ...],
+                            "total_rows": 10,
+                            "total_cols": 3
+                        }
+                    },
+                    ...
+                ]
+            }
+            
+            失败时 (400/500):
+            {
+                "resultcode": 400/500,
+                "message": "错误详细信息",
+                "data": []
+            }
+    
+    错误处理：
+        - 400 Bad Request: Base64 解码失败（格式错误、编码错误）
+        - 500 Internal Server Error: 
+            * PDF 解析失败（非 PDF 数据、文件损坏）
+            * OCR 识别失败（模型未加载、内存不足）
+    
+    使用示例：
+        # Python requests
+        import requests
+        import base64
+        
+        # 读取 PDF 文件并编码为 Base64
+        with open("document.pdf", "rb") as f:
+            pdf_base64 = base64.b64encode(f.read()).decode('utf-8')
+        
+        # 发送请求
+        url = "http://localhost:8000/pdf/predict-by-base64"
+        data = {
+            "base64_str": pdf_base64,
+            "detection_model": "PP-OCRv4_mobile_det",  # 可选
+            "recognition_model": "PP-OCRv4_mobile_rec"  # 可选
+        }
+        response = requests.post(url, json=data)
+        result = response.json()
+        
+        # JavaScript fetch
+        const pdfBase64 = btoa(pdfBinaryData);
+        fetch('http://localhost:8000/pdf/predict-by-base64', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({base64_str: pdfBase64})
+        });
+    
+    注意事项：
+        - Base64 字符串可能很大（PDF 文件 1MB = Base64 约 1.37MB）
+        - 建议 PDF 文件大小不超过 20MB
+        - 支持标准 Base64 编码（带或不带 data URI scheme）
+        - 表格检测基于文本坐标，复杂表格可能识别不准确
+    """
+    try:
+        # 移除可能的 data URI scheme prefix
+        base64_str = pdf_model.base64_str
+        if ',' in base64_str and base64_str.startswith('data:'):
+            base64_str = base64_str.split(',', 1)[1]
+        
+        # 解码 Base64
+        pdf_content = base64.b64decode(base64_str)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Base64 解码失败: {str(e)}"
+        )
+    
+    # 保存为临时文件
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+        tmp_file.write(pdf_content)
+        tmp_pdf_path = tmp_file.name
+    
+    try:
+        # 处理 PDF
+        all_results, image_files = process_pdf(
+            tmp_pdf_path, 
+            pdf_model.detection_model, 
+            pdf_model.recognition_model
+        )
+        
+        # 计算总表格数
+        total_tables = len(all_results)
+        
+        restfulModel = RestfulModel(
+            resultcode=200,
+            message=f"Success: 提取到 {total_tables} 个表格",
             data=all_results
         )
         return restfulModel

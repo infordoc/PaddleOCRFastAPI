@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, UploadFile, status, Query
 from models.OCRModel import *
 from models.RestfulModel import *
 from paddleocr import PaddleOCR
@@ -9,21 +9,70 @@ import requests
 import os
 import tempfile
 import numpy as np
+from typing import Optional
 
 OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "ch")
 
 router = APIRouter(prefix="/ocr", tags=["OCR"])
 
-# Initialize PaddleOCR 3.x with PP-OCRv5 models
-# Using the unified predict() interface introduced in PaddleOCR 3.x
-ocr = PaddleOCR(
-    text_detection_model_name="PP-OCRv5_mobile_det",
-    text_recognition_model_name="PP-OCRv5_mobile_rec",
-    use_angle_cls=True,
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    lang=OCR_LANGUAGE
-)
+# Cache for OCR instances with different model configurations
+_ocr_instances = {}
+
+def get_ocr_instance(detection_model: Optional[str] = None, recognition_model: Optional[str] = None):
+    """
+    获取或创建 PaddleOCR 实例（支持模型选择）
+    
+    Args:
+        detection_model: 检测模型名称 (默认: PP-OCRv5_mobile_det)
+        recognition_model: 识别模型名称 (默认: PP-OCRv5_mobile_rec)
+    
+    可用模型:
+        检测模型:
+            - PP-OCRv5_mobile_det (默认，轻量级)
+            - PP-OCRv5_server_det (服务器版，更准确)
+            - PP-OCRv4_mobile_det (v4轻量级)
+            - PP-OCRv4_server_det (v4服务器版)
+        
+        识别模型:
+            - PP-OCRv5_mobile_rec (默认，轻量级)
+            - PP-OCRv5_server_rec (服务器版，更准确)
+            - PP-OCRv4_mobile_rec (v4轻量级)
+            - PP-OCRv4_server_rec (v4服务器版)
+    
+    Returns:
+        PaddleOCR: OCR 实例
+    """
+    # 使用默认模型
+    if not detection_model:
+        detection_model = "PP-OCRv5_mobile_det"
+    if not recognition_model:
+        recognition_model = "PP-OCRv5_mobile_rec"
+    
+    # 创建缓存键
+    cache_key = f"{detection_model}_{recognition_model}_{OCR_LANGUAGE}"
+    
+    # 如果实例已存在，直接返回
+    if cache_key in _ocr_instances:
+        return _ocr_instances[cache_key]
+    
+    # 创建新实例
+    ocr_instance = PaddleOCR(
+        text_detection_model_name=detection_model,
+        text_recognition_model_name=recognition_model,
+        use_angle_cls=True,
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        lang=OCR_LANGUAGE
+    )
+    
+    # 缓存实例
+    _ocr_instances[cache_key] = ocr_instance
+    
+    return ocr_instance
+
+
+# 保持向后兼容性 - 默认实例
+ocr = get_ocr_instance()
 def _np_to_list(value):
     """仅把需要的 numpy 数组转换为 Python list，其它类型原样返回。"""
     if isinstance(value, np.ndarray):
@@ -111,8 +160,13 @@ def extract_ocr_data(result):
 
 
 @router.get('/predict-by-path', response_model=RestfulModel, summary="识别本地图片")
-def predict_by_path(image_path: str):
-    result = ocr.predict(input=image_path)
+def predict_by_path(
+    image_path: str,
+    detection_model: Optional[str] = Query(None, description="检测模型 (PP-OCRv5_mobile_det, PP-OCRv5_server_det, PP-OCRv4_mobile_det, PP-OCRv4_server_det)"),
+    recognition_model: Optional[str] = Query(None, description="识别模型 (PP-OCRv5_mobile_rec, PP-OCRv5_server_rec, PP-OCRv4_mobile_rec, PP-OCRv4_server_rec)")
+):
+    ocr_instance = get_ocr_instance(detection_model, recognition_model)
+    result = ocr_instance.predict(input=image_path)
     # 提取关键数据：input_path, rec_texts, rec_boxes
     result_data = extract_ocr_data(result)
     restfulModel = RestfulModel(
@@ -131,7 +185,8 @@ def predict_by_base64(base64model: Base64PostModel):
         tmp_file_path = tmp_file.name
     
     try:
-        result = ocr.predict(input=tmp_file_path)
+        ocr_instance = get_ocr_instance(base64model.detection_model, base64model.recognition_model)
+        result = ocr_instance.predict(input=tmp_file_path)
     finally:
         # 删除临时文件
         try:
@@ -147,7 +202,11 @@ def predict_by_base64(base64model: Base64PostModel):
 
 
 @router.post('/predict-by-file', response_model=RestfulModel, summary="识别上传文件")
-async def predict_by_file(file: UploadFile):
+async def predict_by_file(
+    file: UploadFile,
+    detection_model: Optional[str] = Query(None, description="检测模型"),
+    recognition_model: Optional[str] = Query(None, description="识别模型")
+):
     restfulModel: RestfulModel = RestfulModel()
     if file.filename.endswith((".jpg", ".png", ".jpeg", ".bmp", ".tiff")):  # 支持更多图片格式
         restfulModel.resultcode = 200
@@ -162,7 +221,8 @@ async def predict_by_file(file: UploadFile):
             tmp_file_path = tmp_file.name
         
         try:
-            result = ocr.predict(input=tmp_file_path)
+            ocr_instance = get_ocr_instance(detection_model, recognition_model)
+            result = ocr_instance.predict(input=tmp_file_path)
         finally:
             # 删除临时文件
             try:
@@ -182,9 +242,14 @@ async def predict_by_file(file: UploadFile):
 
 
 @router.get('/predict-by-url', response_model=RestfulModel, summary="识别图片 URL")
-async def predict_by_url(imageUrl: str):
+async def predict_by_url(
+    imageUrl: str,
+    detection_model: Optional[str] = Query(None, description="检测模型"),
+    recognition_model: Optional[str] = Query(None, description="识别模型")
+):
     # 直接使用URL进行predict
-    result = ocr.predict(input=imageUrl)
+    ocr_instance = get_ocr_instance(detection_model, recognition_model)
+    result = ocr_instance.predict(input=imageUrl)
     # 提取关键数据：input_path, rec_texts, rec_boxes
     result_data = extract_ocr_data(result)
     restfulModel = RestfulModel(
