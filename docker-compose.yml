@@ -15,14 +15,14 @@ services:
     image: paddleocrfastapi:latest
     
     # Container name
-    container_name: paddleocr-api
+    container_name: paddleocr-api-v3
     
     # Restart policy
     restart: unless-stopped
     
     # Port mapping
     ports:
-      - "8000:8000"  # FastAPI default port
+      - "8100:8000"  # FastAPI default port
     
     # Environment variables
     environment:
