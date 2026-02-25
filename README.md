@@ -11,16 +11,24 @@ A simple way to deploy `PaddleOCR` based on `FastAPI`.
 
 ## Support Version
 
-| PaddleOCR | Branch |
-| :--: | :--: |
-| v2.5 | [paddleocr-v2.5](https://github.com/neozhu/PaddleOCRFastAPI/tree/paddleocr-v2.5) |
-| v2.7 | [paddleocr-v2.7](https://github.com/neozhu/PaddleOCRFastAPI/tree/paddleocr-v2.7) |
+| PaddleOCR | Branch | Status |
+| :--: | :--: | :--: |
+| **v3.x (v3.4.0)** | **main** | **✅ Current** |
+| v2.7 | [paddleocr-v2.7](https://github.com/neozhu/PaddleOCRFastAPI/tree/paddleocr-v2.7) | Legacy |
+| v2.5 | [paddleocr-v2.5](https://github.com/neozhu/PaddleOCRFastAPI/tree/paddleocr-v2.5) | Legacy |
+
+> **Note:** The main branch now uses PaddleOCR 3.x with PaddlePaddle 3.0+, featuring improved performance, new model pipelines (PP-OCRv5), and unified inference interfaces.
 
 ## Features
 
+- [x] **PaddleOCR 3.x** with PP-OCRv5 models for enhanced accuracy
+- [x] **PaddlePaddle 3.0+** compatibility with optimized performance
 - [x] Local path image recognition
 - [x] Base64 data recognition
 - [x] Upload file recognition
+- [x] URL image recognition
+- [x] PDF table extraction with PPStructureV3
+- [x] Multi-language support (80+ languages)
 
 ## Deployment Methods
 
@@ -132,11 +140,33 @@ API Docs: `/docs`
 
 ![Swagger](https://raw.githubusercontent.com/cgcel/PaddleOCRFastAPI/dev/screenshots/Swagger.png)
 
-## Todo
+## What's New in PaddleOCR 3.x
 
-- [x] support ppocr v4
-- [ ] GPU mode
-- [x] Image url recognition
+This project has been upgraded to PaddleOCR 3.x, bringing significant improvements:
+
+### Key Upgrades
+1. **New Model Pipelines**: PP-OCRv5 with improved recognition accuracy for various text types including handwriting
+2. **Unified Inference Interface**: Simplified `predict()` API for streamlined usage
+3. **PaddlePaddle 3.0 Compatibility**: Full support for the latest PaddlePaddle features and optimizations
+4. **Enhanced Table Recognition**: PPStructureV3 for better document understanding and table extraction
+
+### Migration from 2.x
+If you're upgrading from PaddleOCR 2.x:
+- The API now uses `predict()` method instead of `ocr()` with parameters
+- `show_log` parameter is replaced by a new logging system
+- `use_onnx` is replaced by high-performance inference features
+- `PPStructure` is now `PPStructureV3`
+
+For more details, see the [PaddleOCR 3.x Upgrade Documentation](https://github.com/PaddlePaddle/PaddleOCR/blob/main/doc/doc_en/paddleocr_3x_upgrade_en.md)
+
+## Roadmap
+
+- [x] Support PaddleOCR v3.x (PP-OCRv5)
+- [x] Image URL recognition
+- [x] PDF table extraction
+- [ ] GPU mode optimization
+- [ ] Batch processing support
+- [ ] Real-time streaming OCR
 
 ## License
 
