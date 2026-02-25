@@ -26,6 +26,19 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+# Health check endpoint for Docker/Dokploy
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """
+    Health check endpoint for container orchestration and load balancers.
+    Returns 200 OK if the service is running properly.
+    """
+    return {
+        "status": "healthy",
+        "service": "PaddleOCR FastAPI",
+        "version": "3.x"
+    }
+
 app.include_router(ocr.router)
 app.include_router(pdf_ocr.router)
 

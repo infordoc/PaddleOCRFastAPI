@@ -1,7 +1,13 @@
+# ============================================
+# .dockerignore for PaddleOCR FastAPI
+# Optimized to reduce image size
+# ============================================
+
 # Git
 .git
 .gitignore
 .gitattributes
+.github/
 
 # Python
 __pycache__
@@ -23,27 +29,49 @@ build/
 *.swo
 *~
 
-# Documentation
+# Documentation (keep out of image)
 *.md
+!README.md
 LICENSE
 screenshots/
 
-# Docker
-Dockerfile
-docker-compose.yml
+# Docker files (no need to copy these)
+Dockerfile*
+docker-compose*.yml
 .dockerignore
+
+# Tests (not needed in production)
+test_*.py
+tests/
+pytest.ini
+.pytest_cache/
 
 # CI/CD
 .github/
-
-# Tests
-test_*.py
-tests/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Models (if large)
-models/*.pth
-models/*.onnx
+# Sample PDFs and test data
+*.pdf
+*.txt
+*.json
+!requirements.txt
+
+# Models directory if contains pre-downloaded models
+# Uncomment if you want to force download on first run
+# models/
+
+# Temporary files
+*.log
+*.tmp
+tmp/
+
+# Editor configs
+.editorconfig
+.prettierrc
+
+# Package management
+requirements.in
+pip-compile*

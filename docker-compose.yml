@@ -1,19 +1,89 @@
-# version: "3"
+# ============================================
+# Docker Compose for PaddleOCR 3.x FastAPI
+# Optimized for Dokploy deployment
+# ============================================
+version: "3.8"
 
 services:
-
-  PaddleOCR:
-    build: . 
-    container_name: paddle_ocr_api # 自定义容器名
-    image: paddleocrfastapi:2025 # 使用刚才构建的镜像
-    environment:
-      - TZ=Asia/Hong_Kong
-      - OCR_LANGUAGE=ch
-    ports:
-      - 8000:8000 # 自定义服务暴露端口, 8000为FastAPI默认端口, 不做修改
-    volumes:
-      - paddleocr_models:/root/.paddlex  # 持久化存储 OCR 模型
+  paddleocr-api:
+    # Build from local Dockerfile (Dokploy will build this automatically)
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # Image name for the built image
+    image: paddleocrfastapi:latest
+    
+    # Container name
+    container_name: paddleocr-api
+    
+    # Restart policy
     restart: unless-stopped
+    
+    # Port mapping
+    ports:
+      - "8000:8000"  # FastAPI default port
+    
+    # Environment variables
+    environment:
+      # Timezone configuration
+      - TZ=America/Sao_Paulo
+      
+      # OCR Language (ch=Chinese, en=English, pt=Portuguese, etc.)
+      # See: https://github.com/PaddlePaddle/PaddleOCR/blob/main/doc/doc_en/multi_languages_en.md
+      - OCR_LANGUAGE=pt
+      
+      # Debug mode (set to 1 to enable debug output)
+      - OCR_DEBUG=0
+      
+      # Force CPU usage (GPU not supported in this build)
+      - USE_GPU=false
+    
+    # Volume mounts
+    volumes:
+      # Model cache - PaddleOCR 3.x stores models here
+      # This persists models between container restarts
+      - paddleocr_models:/root/.paddleocr
+      
+      # Optional: Upload directory (uncomment if needed)
+      # - ./uploads:/app/uploads
+      
+      # Optional: Output directory (uncomment if needed)
+      # - ./output:/app/output
+    
+    # Resource limits (adjust based on your server capacity)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'      # Maximum CPU cores
+          memory: 3G       # Maximum RAM (PaddleOCR needs ~2-3GB)
+        reservations:
+          cpus: '0.5'      # Minimum CPU cores
+          memory: 1G       # Minimum RAM
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Allow time for models to download on first run
+    
+    # Network configuration (optional)
+    # networks:
+    #   - paddleocr_network
+
+# Persistent volumes
 volumes:
   paddleocr_models:
     driver: local
+    # Optional: specify driver options for better performance
+    # driver_opts:
+    #   type: none
+    #   device: /path/on/host/paddleocr_models
+    #   o: bind
+
+# Optional: Custom network
+# networks:
+#   paddleocr_network:
+#     driver: bridge

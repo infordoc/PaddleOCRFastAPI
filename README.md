@@ -59,6 +59,14 @@ A simple way to deploy `PaddleOCR` based on `FastAPI`.
 
 Test completed in `Centos 7`, `Ubuntu 20.04`, `Ubuntu 22.04`, `Windows 10`, `Windows 11`, requires `Docker` to be installed.
 
+#### Quick Deploy with Dokploy
+
+For deployment using Dokploy (Docker + GitHub), see:
+- 🚀 [Quick Start Guide](DEPLOY_QUICK_START.md) - 5-minute setup
+- 📖 [Complete Dokploy Guide](DOKPLOY_DEPLOY.md) - Detailed instructions
+
+#### Manual Docker Build
+
 1. Copy the project to the deployment path
 
    ```shell
