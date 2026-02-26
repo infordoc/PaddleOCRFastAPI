@@ -25,21 +25,17 @@ The Docker images automatically include `paddlex[ocr]` dependencies, so VL model
 
 ### Local Installation
 
-**For basic PaddleOCR (traditional models only):**
+**Install all dependencies (including VL support):**
 ```bash
-pip install -r requirements.txt
-# But note: requirements.txt now includes paddlex[ocr] by default
+pip install -r requirements.txt  # Includes paddlex[ocr] by default
 ```
 
-**The requirements.txt now includes VL dependencies:**
-```bash
-pip install -r requirements.txt  # Includes paddlex[ocr]
-```
-
-**Manual installation:**
+**Manual installation of just VL dependencies:**
 ```bash
 pip install 'paddlex[ocr]'
 ```
+
+**Note**: As of this version, `requirements.txt` includes VL dependencies by default. To exclude VL dependencies, install packages individually from `requirements.in` (excluding the `paddlex[ocr]` line).
 
 Without these dependencies, attempting to use VL models will result in a `501 Not Implemented` error with a message indicating the missing dependencies.
 
