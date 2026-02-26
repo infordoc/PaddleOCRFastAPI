@@ -23,12 +23,21 @@ A simple way to deploy `PaddleOCR` based on `FastAPI`.
 
 - [x] **PaddleOCR 3.x** with PP-OCRv5 models for enhanced accuracy
 - [x] **PaddlePaddle 3.0+** compatibility with optimized performance
+- [x] **PaddleOCR-VL support** - Optional multimodal vision-language models for advanced document analysis
+  - 111 language support
+  - Automatic layout detection
+  - Complex table recognition
+  - Formula and chart recognition
+  - Seal and stamp recognition
 - [x] Local path image recognition
 - [x] Base64 data recognition
 - [x] Upload file recognition
 - [x] URL image recognition
 - [x] PDF table extraction with PPStructureV3
-- [x] Multi-language support (80+ languages)
+- [x] Multi-language support (80+ languages with traditional models, 111 with VL models)
+- [x] Model selection support (PP-OCRv4, PP-OCRv5, PaddleOCR-VL)
+
+> 📖 **See [PaddleOCR-VL Integration Guide](PADDLEOCR_VL_GUIDE.md)** for detailed documentation on using VL models
 
 ## Deployment Methods
 
@@ -170,15 +179,38 @@ For more details, see the [PaddleOCR 3.x Upgrade Documentation](https://github.c
 ## Documentation
 
 - 📖 [Quick Reference Guide](QUICK_REFERENCE.md) - Quick commands and examples
+- 🌟 [PaddleOCR-VL Integration Guide](PADDLEOCR_VL_GUIDE.md) - Using multimodal VL models for advanced OCR
 - 📋 [Migration Guide](MIGRATION_GUIDE.md) - Detailed migration from 2.x to 3.x
 - 📝 [Changelog](CHANGELOG.md) - Complete list of changes
 - 💡 [Usage Examples](examples_paddleocr_3x.py) - Code examples for 3.x features
+
+## Quick Start with VL Models
+
+Use advanced multimodal models for complex documents:
+
+```python
+import requests
+
+# Using PaddleOCR-VL-1.5 for complex document recognition
+response = requests.get(
+    "http://localhost:8000/ocr/predict-by-path",
+    params={
+        "image_path": "/path/to/complex_document.jpg",
+        "detection_model": "PaddleOCR-VL-1.5"
+    }
+)
+result = response.json()
+```
+
+See the [PaddleOCR-VL Integration Guide](PADDLEOCR_VL_GUIDE.md) for more examples and detailed documentation.
 
 ## Roadmap
 
 - [x] Support PaddleOCR v3.x (PP-OCRv5)
 - [x] Image URL recognition
 - [x] PDF table extraction
+- [x] **PaddleOCR-VL multimodal model support**
+- [x] **Model selection for all endpoints (PP-OCRv4, PP-OCRv5, VL)**
 - [ ] GPU mode optimization
 - [ ] Batch processing support
 - [ ] Real-time streaming OCR
