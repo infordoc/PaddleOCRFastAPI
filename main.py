@@ -12,11 +12,12 @@ from routers import ocr, pdf_ocr
 from utils.ImageHelper import *
 
 # Suppress expected library warnings for cleaner logs
+# Only suppress warnings from PaddlePaddle/PaddleOCR libraries
 # These warnings are informational and don't affect functionality
-warnings.filterwarnings("ignore", message=".*lang.*ocr_version.*will be ignored.*")
-warnings.filterwarnings("ignore", message=".*ccache.*")
-warnings.filterwarnings("ignore", message=".*Non compatible API.*")
-warnings.filterwarnings("ignore", message=".*To copy construct from a tensor.*")
+warnings.filterwarnings("ignore", message=".*lang.*ocr_version.*will be ignored.*", module="paddleocr.*")
+warnings.filterwarnings("ignore", message=".*ccache.*", module="paddle.*")
+warnings.filterwarnings("ignore", message=".*Non compatible API.*", module="paddle.*")
+warnings.filterwarnings("ignore", message=".*To copy construct from a tensor.*", module="paddle.*")
 
 app = FastAPI(title="Paddle OCR API",
               description="基于 Paddle OCR 和 FastAPI 的自用接口")
