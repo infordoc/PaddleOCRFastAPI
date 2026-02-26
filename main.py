@@ -5,10 +5,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 # import uvicorn
 import yaml
+import warnings
 
 from models.RestfulModel import *
 from routers import ocr, pdf_ocr
 from utils.ImageHelper import *
+
+# Suppress expected library warnings for cleaner logs
+# These warnings are informational and don't affect functionality
+warnings.filterwarnings("ignore", message=".*lang.*ocr_version.*will be ignored.*")
+warnings.filterwarnings("ignore", message=".*ccache.*")
+warnings.filterwarnings("ignore", message=".*Non compatible API.*")
+warnings.filterwarnings("ignore", message=".*To copy construct from a tensor.*")
 
 app = FastAPI(title="Paddle OCR API",
               description="基于 Paddle OCR 和 FastAPI 的自用接口")

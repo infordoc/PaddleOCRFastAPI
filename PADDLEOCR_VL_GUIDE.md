@@ -484,6 +484,34 @@ Then restart the server. The VL models will be available after installation.
 
 **Solution**: Ensure internet connection and adequate disk space. First use requires downloading ~2GB.
 
+### Issue: Library Warnings in Logs
+
+**Symptoms**: You may see warnings like:
+- `lang and ocr_version will be ignored when model names are not None`
+- `No ccache found`
+- `Non compatible API` (PyTorch compatibility)
+- `To copy construct from a tensor...`
+
+**Cause**: These are informational warnings from PaddlePaddle/PaddleOCR libraries.
+
+**Solution**: These warnings are **expected and harmless**. They don't affect functionality:
+- The lang/ocr_version warning is expected when using explicit model names
+- ccache is an optional compiler optimization
+- PyTorch API warnings are informational about internal conversions
+- Tensor warnings are from internal library operations
+
+The warnings are automatically suppressed in the application for cleaner logs. If you still see them during startup, they can be safely ignored.
+
+To completely disable model source connectivity checks (speeds up startup):
+```bash
+export PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+```
+
+Or in docker-compose.yml, uncomment:
+```yaml
+- PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+```
+
 ### Issue: Out of Memory
 
 **Solution**: VL models require more memory. Consider:
