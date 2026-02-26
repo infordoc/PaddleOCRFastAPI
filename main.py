@@ -14,10 +14,11 @@ from utils.ImageHelper import *
 # Suppress expected library warnings for cleaner logs
 # Only suppress warnings from PaddlePaddle/PaddleOCR libraries
 # These warnings are informational and don't affect functionality
-warnings.filterwarnings("ignore", message=".*lang.*ocr_version.*will be ignored.*", module="paddleocr.*")
-warnings.filterwarnings("ignore", message=".*ccache.*", module="paddle.*")
-warnings.filterwarnings("ignore", message=".*Non compatible API.*", module="paddle.*")
-warnings.filterwarnings("ignore", message=".*To copy construct from a tensor.*", module="paddle.*")
+# Using specific patterns to avoid suppressing unintended warnings
+warnings.filterwarnings("ignore", message=r"^`lang` and `ocr_version` will be ignored", module="paddleocr.*")
+warnings.filterwarnings("ignore", message=r"^No ccache found", module="paddle.*")
+warnings.filterwarnings("ignore", message=r"^Non compatible API\.", module="paddle.*")
+warnings.filterwarnings("ignore", message=r"^To copy construct from a tensor,", module="paddle.*")
 
 app = FastAPI(title="Paddle OCR API",
               description="基于 Paddle OCR 和 FastAPI 的自用接口")

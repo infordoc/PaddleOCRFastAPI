@@ -502,6 +502,12 @@ Then restart the server. The VL models will be available after installation.
 
 The warnings are automatically suppressed in the application for cleaner logs. If you still see them during startup, they can be safely ignored.
 
+**Verification**: To confirm the application is working correctly:
+1. Check that the server starts: `INFO: Uvicorn running on http://0.0.0.0:8000`
+2. Access Swagger UI: http://localhost:8000/docs (should return 200 OK)
+3. Test an OCR endpoint with a sample image
+4. Check for successful OCR results in the response
+
 To completely disable model source connectivity checks (speeds up startup):
 ```bash
 export PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
