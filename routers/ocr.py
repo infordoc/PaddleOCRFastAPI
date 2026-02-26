@@ -9,7 +9,7 @@ import requests
 import os
 import tempfile
 import numpy as np
-from typing import Optional
+from typing import Optional, Union
 import fitz  # PyMuPDF - para processar PDF
 import base64
 
@@ -20,9 +20,16 @@ router = APIRouter(prefix="/ocr", tags=["OCR"])
 # Cache for OCR instances with different model configurations
 _ocr_instances = {}
 
-def get_ocr_instance(detection_model: Optional[str] = None, recognition_model: Optional[str] = None):
+# VL model names
+VL_MODELS = ["PaddleOCR-VL-1.5", "PaddleOCR-VL"]
+
+def is_vl_model(model_name: Optional[str]) -> bool:
+    """Check if the model name is a VL model"""
+    return model_name in VL_MODELS if model_name else False
+
+def get_ocr_instance(detection_model: Optional[str] = None, recognition_model: Optional[str] = None) -> Union['PaddleOCR', 'PaddleOCRVL']:
     """
-    获取或创建 PaddleOCR 实例（支持模型选择）
+    获取或创建 PaddleOCR 或 PaddleOCRVL 实例（支持模型选择）
     
     Args:
         detection_model: 检测模型名称 (默认: PP-OCRv5_server_det)
@@ -34,43 +41,105 @@ def get_ocr_instance(detection_model: Optional[str] = None, recognition_model: O
             - PP-OCRv5_mobile_det (轻量级，更快)
             - PP-OCRv4_mobile_det (v4轻量级)
             - PP-OCRv4_server_det (v4服务器版)
+            - PaddleOCR-VL-1.5 (多模态视觉语言模型，支持表格、公式、图章、111种语言)
+            - PaddleOCR-VL (多模态视觉语言模型)
         
         识别模型:
             - PP-OCRv5_server_rec (默认，更准确)
             - PP-OCRv5_mobile_rec (轻量级，更快)
             - PP-OCRv4_mobile_rec (v4轻量级)
             - PP-OCRv4_server_rec (v4服务器版)
+            - PaddleOCR-VL-1.5 (多模态视觉语言模型，支持表格、公式、图章、111种语言)
+            - PaddleOCR-VL (多模态视觉语言模型)
     
     Returns:
-        PaddleOCR: OCR 实例
+        Union[PaddleOCR, PaddleOCRVL]: OCR 实例
+        
+    Note:
+        当使用 PaddleOCR-VL 模型时，将使用 PaddleOCRVL 接口进行推理，
+        支持布局分析、表格识别、图表识别、图章识别等高级功能。
     """
-    # 使用默认模型 - Server 版本更准确
-    if not detection_model:
-        detection_model = "PP-OCRv5_server_det"
-    if not recognition_model:
-        recognition_model = "PP-OCRv5_server_rec"
+    # 检查是否使用 VL 模型
+    use_vl = is_vl_model(detection_model) or is_vl_model(recognition_model)
     
-    # 创建缓存键
-    cache_key = f"{detection_model}_{recognition_model}_{OCR_LANGUAGE}"
-    
-    # 如果实例已存在，直接返回
-    if cache_key in _ocr_instances:
-        return _ocr_instances[cache_key]
-    
-    # 创建新实例
-    ocr_instance = PaddleOCR(
-        text_detection_model_name=detection_model,
-        text_recognition_model_name=recognition_model,
-        use_angle_cls=True,
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
-        lang=OCR_LANGUAGE
-    )
-    
-    # 缓存实例
-    _ocr_instances[cache_key] = ocr_instance
-    
-    return ocr_instance
+    if use_vl:
+        # 确定使用哪个 VL 版本 - 检查两个参数中是否包含 "1.5"
+        vl_version = "v1.5" if ("1.5" in (detection_model or "") or "1.5" in (recognition_model or "")) else "v1"
+        
+        # 创建缓存键
+        cache_key = f"VL_{vl_version}_{OCR_LANGUAGE}"
+        
+        # 如果实例已存在，直接返回
+        if cache_key in _ocr_instances:
+            return _ocr_instances[cache_key]
+        
+        # 创建 PaddleOCRVL 实例
+        try:
+            from paddleocr import PaddleOCRVL
+            
+            ocr_instance = PaddleOCRVL(
+                pipeline_version=vl_version,
+                device=os.environ.get("OCR_DEVICE", "cpu"),
+                use_layout_detection=True,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_chart_recognition=True,
+                use_seal_recognition=True,
+                use_ocr_for_image_block=True,
+                format_block_content=True,
+                merge_layout_blocks=True,
+            )
+            
+            # 缓存实例
+            _ocr_instances[cache_key] = ocr_instance
+            
+            return ocr_instance
+        except ImportError as e:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail=f"PaddleOCR-VL model is not available. Please install required dependencies: pip install 'paddlex[ocr]'. Error: {str(e)}"
+            )
+        except Exception as e:
+            # Catch RuntimeError and other exceptions from PaddleOCR-VL initialization
+            error_msg = str(e).lower()
+            if "dependency" in error_msg or "paddlex[ocr]" in error_msg or "require" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail=f"PaddleOCR-VL requires additional dependencies. Install with: pip install 'paddlex[ocr]'. Error: {str(e)}"
+                )
+            # Re-raise other exceptions as internal server errors
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to initialize PaddleOCR-VL model: {str(e)}"
+            )
+    else:
+        # 使用默认模型 - Server 版本更准确
+        if not detection_model:
+            detection_model = "PP-OCRv5_server_det"
+        if not recognition_model:
+            recognition_model = "PP-OCRv5_server_rec"
+        
+        # 创建缓存键
+        cache_key = f"{detection_model}_{recognition_model}_{OCR_LANGUAGE}"
+        
+        # 如果实例已存在，直接返回
+        if cache_key in _ocr_instances:
+            return _ocr_instances[cache_key]
+        
+        # 创建新实例
+        ocr_instance = PaddleOCR(
+            text_detection_model_name=detection_model,
+            text_recognition_model_name=recognition_model,
+            use_angle_cls=True,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            lang=OCR_LANGUAGE
+        )
+        
+        # 缓存实例
+        _ocr_instances[cache_key] = ocr_instance
+        
+        return ocr_instance
 
 
 # 保持向后兼容性 - 默认实例
@@ -84,12 +153,17 @@ def _np_to_list(value):
 
 def extract_ocr_data(result):
     """
-    从 PaddleOCR 3.x predict 返回结构中提取所需字段
+    从 PaddleOCR 3.x 或 PaddleOCRVL predict 返回结构中提取所需字段
     
     PaddleOCR 3.x 返回格式说明：
     - 统一的 predict() 接口返回 OCRResult 对象列表
     - 每个结果包含 rec_texts, rec_boxes, rec_scores, input_path 等属性
     - 相比 2.x 的嵌套列表结构更清晰易用
+    
+    PaddleOCRVL 返回格式说明：
+    - 返回包含识别内容的字典或对象
+    - 可能包含 ocr_texts, layout_res, table_res_list 等字段
+    - 需要适配以兼容现有的 rec_texts/rec_boxes 格式
     
     返回格式: [{ 'input_path': str, 'rec_texts': list[str], 'rec_boxes': list }]
     
@@ -98,6 +172,7 @@ def extract_ocr_data(result):
     2. [{'res': {...}}, {'res': {...}}]  # 多页结果
     3. OCRResult 对象: 具备属性 input_path / rec_texts / rec_boxes
     4. 直接是 dict {...}
+    5. PaddleOCRVL 结果: 包含 ocr_texts, layout_res 等字段
     """
 
     debug = os.environ.get("OCR_DEBUG", "0") == "1"
@@ -123,6 +198,48 @@ def extract_ocr_data(result):
             'rec_texts': rec_texts,
             'rec_boxes': rec_boxes
         }
+    
+    def _extract_from_vl_result(vl_result):
+        """Extract text and boxes from PaddleOCRVL result"""
+        rec_texts = []
+        rec_boxes = []
+        
+        # Try to extract from ocr_texts field
+        ocr_texts = vl_result.get('ocr_texts', [])
+        if ocr_texts and isinstance(ocr_texts, list):
+            for item in ocr_texts:
+                if isinstance(item, dict):
+                    text = item.get('text', '')
+                    bbox = item.get('bbox', [])
+                    if text:
+                        rec_texts.append(text)
+                        rec_boxes.append(bbox)
+        
+        # If no ocr_texts, try layout_res
+        if not rec_texts:
+            layout_res = vl_result.get('layout_res', [])
+            if layout_res and isinstance(layout_res, list):
+                for block in layout_res:
+                    if isinstance(block, dict):
+                        text = block.get('text', '')
+                        bbox = block.get('bbox', [])
+                        if text:
+                            rec_texts.append(text)
+                            rec_boxes.append(bbox)
+        
+        # If still no texts, try to get from response field
+        if not rec_texts:
+            response = vl_result.get('response', '')
+            if response and isinstance(response, str):
+                # For simple text responses, create a single entry
+                rec_texts = [response]
+                rec_boxes = [[]]
+        
+        return {
+            'input_path': vl_result.get('input_path', ''),
+            'rec_texts': rec_texts,
+            'rec_boxes': rec_boxes
+        }
 
     extracted = []
 
@@ -132,7 +249,11 @@ def extract_ocr_data(result):
             data = None
             # dict 情况
             if isinstance(item, dict):
-                data = _extract_from_dict(item)
+                # Check if it's a VL result
+                if 'ocr_texts' in item or 'layout_res' in item or 'response' in item:
+                    data = _extract_from_vl_result(item)
+                else:
+                    data = _extract_from_dict(item)
             else:  # 对象属性情况
                 input_path = getattr(item, 'input_path', '')
                 rec_texts = getattr(item, 'rec_texts', []) or []
@@ -151,7 +272,11 @@ def extract_ocr_data(result):
 
     # 情况 B: result 是 dict
     if isinstance(result, dict):
-        data = _extract_from_dict(result)
+        # Check if it's a VL result
+        if 'ocr_texts' in result or 'layout_res' in result or 'response' in result:
+            data = _extract_from_vl_result(result)
+        else:
+            data = _extract_from_dict(result)
         if data:
             return [data]
 
@@ -164,8 +289,8 @@ def extract_ocr_data(result):
 @router.get('/predict-by-path', response_model=RestfulModel, summary="识别本地图片")
 def predict_by_path(
     image_path: str,
-    detection_model: Optional[str] = Query(None, description="检测模型 (PP-OCRv5_mobile_det, PP-OCRv5_server_det, PP-OCRv4_mobile_det, PP-OCRv4_server_det)"),
-    recognition_model: Optional[str] = Query(None, description="识别模型 (PP-OCRv5_mobile_rec, PP-OCRv5_server_rec, PP-OCRv4_mobile_rec, PP-OCRv4_server_rec)")
+    detection_model: Optional[str] = Query(None, description="检测模型 (PP-OCRv5_server_det, PP-OCRv5_mobile_det, PP-OCRv4_server_det, PP-OCRv4_mobile_det, PaddleOCR-VL-1.5, PaddleOCR-VL)"),
+    recognition_model: Optional[str] = Query(None, description="识别模型 (PP-OCRv5_server_rec, PP-OCRv5_mobile_rec, PP-OCRv4_server_rec, PP-OCRv4_mobile_rec, PaddleOCR-VL-1.5, PaddleOCR-VL)")
 ):
     ocr_instance = get_ocr_instance(detection_model, recognition_model)
     result = ocr_instance.predict(input=image_path)
@@ -206,8 +331,8 @@ def predict_by_base64(base64model: Base64PostModel):
 @router.post('/predict-by-file', response_model=RestfulModel, summary="识别上传文件")
 async def predict_by_file(
     file: UploadFile,
-    detection_model: Optional[str] = Query(None, description="检测模型"),
-    recognition_model: Optional[str] = Query(None, description="识别模型")
+    detection_model: Optional[str] = Query(None, description="检测模型 (PP-OCRv5_server_det, PP-OCRv5_mobile_det, PP-OCRv4_server_det, PP-OCRv4_mobile_det, PaddleOCR-VL-1.5, PaddleOCR-VL)"),
+    recognition_model: Optional[str] = Query(None, description="识别模型 (PP-OCRv5_server_rec, PP-OCRv5_mobile_rec, PP-OCRv4_server_rec, PP-OCRv4_mobile_rec, PaddleOCR-VL-1.5, PaddleOCR-VL)")
 ):
     restfulModel: RestfulModel = RestfulModel()
     if file.filename.endswith((".jpg", ".png", ".jpeg", ".bmp", ".tiff")):  # 支持更多图片格式
@@ -246,8 +371,8 @@ async def predict_by_file(
 @router.get('/predict-by-url', response_model=RestfulModel, summary="识别图片 URL")
 async def predict_by_url(
     imageUrl: str,
-    detection_model: Optional[str] = Query(None, description="检测模型"),
-    recognition_model: Optional[str] = Query(None, description="识别模型")
+    detection_model: Optional[str] = Query(None, description="检测模型 (PP-OCRv5_server_det, PP-OCRv5_mobile_det, PP-OCRv4_server_det, PP-OCRv4_mobile_det, PaddleOCR-VL-1.5, PaddleOCR-VL)"),
+    recognition_model: Optional[str] = Query(None, description="识别模型 (PP-OCRv5_server_rec, PP-OCRv5_mobile_rec, PP-OCRv4_server_rec, PP-OCRv4_mobile_rec, PaddleOCR-VL-1.5, PaddleOCR-VL)")
 ):
     # 直接使用URL进行predict
     ocr_instance = get_ocr_instance(detection_model, recognition_model)
@@ -292,8 +417,8 @@ def pdf_to_images(pdf_path: str):
 @router.post('/pdf-predict-by-file', response_model=RestfulModel, summary="识别上传的PDF文件（全文OCR）")
 async def pdf_predict_by_file(
     file: UploadFile,
-    detection_model: Optional[str] = Query(None, description="检测模型"),
-    recognition_model: Optional[str] = Query(None, description="识别模型")
+    detection_model: Optional[str] = Query(None, description="检测模型 (PP-OCRv5_server_det, PP-OCRv5_mobile_det, PP-OCRv4_server_det, PP-OCRv4_mobile_det, PaddleOCR-VL-1.5, PaddleOCR-VL)"),
+    recognition_model: Optional[str] = Query(None, description="识别模型 (PP-OCRv5_server_rec, PP-OCRv5_mobile_rec, PP-OCRv4_server_rec, PP-OCRv4_mobile_rec, PaddleOCR-VL-1.5, PaddleOCR-VL)")
 ):
     """
     上传 PDF 文件并对每一页进行 OCR 文本识别

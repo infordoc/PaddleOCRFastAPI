@@ -31,7 +31,7 @@ FROM python:3.9-slim-bullseye
 
 # Metadata
 LABEL maintainer="PaddleOCR FastAPI" \
-      description="PaddleOCR 3.x with FastAPI - Production Ready" \
+      description="PaddleOCR 3.x with FastAPI - Production Ready with VL Model Support" \
       version="3.x"
 
 WORKDIR /app
@@ -60,8 +60,8 @@ COPY models ./models
 COPY routers ./routers
 COPY utils ./utils
 
-# Create directory for model cache
-RUN mkdir -p /root/.paddleocr
+# Create directory for model cache (both PaddleOCR and PaddleX models)
+RUN mkdir -p /root/.paddleocr /root/.paddlex
 
 # Expose port
 EXPOSE 8000

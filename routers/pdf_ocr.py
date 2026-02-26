@@ -25,7 +25,7 @@ import numpy as np
 from PIL import Image
 import io
 import base64
-from typing import Optional
+from typing import Optional, Union
 
 # 从环境变量获取 OCR 语言配置，默认为中文
 OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "ch")
@@ -36,9 +36,16 @@ router = APIRouter(prefix="/pdf", tags=["PDF OCR"])
 # OCR 实例缓存（支持不同模型配置）
 _pdf_ocr_instances = {}
 
-def get_pdf_ocr(detection_model: Optional[str] = None, recognition_model: Optional[str] = None):
+# VL model names
+VL_MODELS = ["PaddleOCR-VL-1.5", "PaddleOCR-VL"]
+
+def is_vl_model(model_name: Optional[str]) -> bool:
+    """Check if the model name is a VL model"""
+    return model_name in VL_MODELS if model_name else False
+
+def get_pdf_ocr(detection_model: Optional[str] = None, recognition_model: Optional[str] = None) -> Union['PaddleOCR', 'PaddleOCRVL']:
     """
-    获取 PaddleOCR 3.x 实例（单例模式，支持模型选择）
+    获取 PaddleOCR 3.x 或 PaddleOCRVL 实例（单例模式，支持模型选择）
     
     采用延迟初始化策略，只在第一次调用时创建 OCR 实例，
     避免服务启动时加载模型导致启动变慢。
@@ -53,44 +60,106 @@ def get_pdf_ocr(detection_model: Optional[str] = None, recognition_model: Option
             - PP-OCRv5_mobile_det (轻量级，更快)
             - PP-OCRv4_mobile_det (v4轻量级)
             - PP-OCRv4_server_det (v4服务器版)
+            - PaddleOCR-VL-1.5 (多模态视觉语言模型，支持表格、公式、图章、111种语言)
+            - PaddleOCR-VL (多模态视觉语言模型)
         
         识别模型:
             - PP-OCRv5_server_rec (默认，更准确)
             - PP-OCRv5_mobile_rec (轻量级，更快)
             - PP-OCRv4_mobile_rec (v4轻量级)
             - PP-OCRv4_server_rec (v4服务器版)
+            - PaddleOCR-VL-1.5 (多模态视觉语言模型，支持表格、公式、图章、111种语言)
+            - PaddleOCR-VL (多模态视觉语言模型)
     
     Returns:
-        PaddleOCR: OCR 实例对象
+        Union[PaddleOCR, PaddleOCRVL]: OCR 实例对象
+        
+    Note:
+        当使用 PaddleOCR-VL 模型时，将使用 PaddleOCRVL 接口进行推理，
+        支持布局分析、表格识别、图表识别、图章识别等高级功能。
     """
-    # 使用默认模型 - Server 版本更准确
-    if not detection_model:
-        detection_model = "PP-OCRv5_server_det"
-    if not recognition_model:
-        recognition_model = "PP-OCRv5_server_rec"
+    # 检查是否使用 VL 模型
+    use_vl = is_vl_model(detection_model) or is_vl_model(recognition_model)
     
-    # 创建缓存键
-    cache_key = f"{detection_model}_{recognition_model}_{OCR_LANGUAGE}"
-    
-    # 如果实例已存在，直接返回
-    if cache_key in _pdf_ocr_instances:
-        return _pdf_ocr_instances[cache_key]
-    
-    # 创建新实例
-    # PaddleOCR 3.x unified interface with customizable models
-    ocr_instance = PaddleOCR(
-        text_detection_model_name=detection_model,  # 文本检测模型
-        text_recognition_model_name=recognition_model,  # 文本识别模型
-        use_angle_cls=True,  # 启用角度分类器
-        use_doc_orientation_classify=False,  # 禁用文档方向分类
-        use_doc_unwarping=False,  # 禁用文档矫正
-        lang=OCR_LANGUAGE  # 语言设置
-    )
-    
-    # 缓存实例
-    _pdf_ocr_instances[cache_key] = ocr_instance
-    
-    return ocr_instance
+    if use_vl:
+        # 确定使用哪个 VL 版本 - 检查两个参数中是否包含 "1.5"
+        vl_version = "v1.5" if ("1.5" in (detection_model or "") or "1.5" in (recognition_model or "")) else "v1"
+        
+        # 创建缓存键
+        cache_key = f"VL_{vl_version}_{OCR_LANGUAGE}"
+        
+        # 如果实例已存在，直接返回
+        if cache_key in _pdf_ocr_instances:
+            return _pdf_ocr_instances[cache_key]
+        
+        # 创建 PaddleOCRVL 实例
+        try:
+            from paddleocr import PaddleOCRVL
+            
+            ocr_instance = PaddleOCRVL(
+                pipeline_version=vl_version,
+                device=os.environ.get("OCR_DEVICE", "cpu"),
+                use_layout_detection=True,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_chart_recognition=True,
+                use_seal_recognition=True,
+                use_ocr_for_image_block=True,
+                format_block_content=True,
+                merge_layout_blocks=True,
+            )
+            
+            # 缓存实例
+            _pdf_ocr_instances[cache_key] = ocr_instance
+            
+            return ocr_instance
+        except ImportError as e:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail=f"PaddleOCR-VL model is not available. Please install required dependencies: pip install 'paddlex[ocr]'. Error: {str(e)}"
+            )
+        except Exception as e:
+            # Catch RuntimeError and other exceptions from PaddleOCR-VL initialization
+            error_msg = str(e).lower()
+            if "dependency" in error_msg or "paddlex[ocr]" in error_msg or "require" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail=f"PaddleOCR-VL requires additional dependencies. Install with: pip install 'paddlex[ocr]'. Error: {str(e)}"
+                )
+            # Re-raise other exceptions as internal server errors
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to initialize PaddleOCR-VL model: {str(e)}"
+            )
+    else:
+        # 使用默认模型 - Server 版本更准确
+        if not detection_model:
+            detection_model = "PP-OCRv5_server_det"
+        if not recognition_model:
+            recognition_model = "PP-OCRv5_server_rec"
+        
+        # 创建缓存键
+        cache_key = f"{detection_model}_{recognition_model}_{OCR_LANGUAGE}"
+        
+        # 如果实例已存在，直接返回
+        if cache_key in _pdf_ocr_instances:
+            return _pdf_ocr_instances[cache_key]
+        
+        # 创建新实例
+        # PaddleOCR 3.x unified interface with customizable models
+        ocr_instance = PaddleOCR(
+            text_detection_model_name=detection_model,  # 文本检测模型
+            text_recognition_model_name=recognition_model,  # 文本识别模型
+            use_angle_cls=True,  # 启用角度分类器
+            use_doc_orientation_classify=False,  # 禁用文档方向分类
+            use_doc_unwarping=False,  # 禁用文档矫正
+            lang=OCR_LANGUAGE  # 语言设置
+        )
+        
+        # 缓存实例
+        _pdf_ocr_instances[cache_key] = ocr_instance
+        
+        return ocr_instance
 
 
 def pdf_to_images(pdf_path: str):
@@ -319,18 +388,19 @@ def reconstruct_table(texts, boxes, y_threshold=30, min_cols=3):
 
 def extract_pdf_ocr_data(result, page_num):
     """
-    从 PaddleOCR 3.x 识别结果中提取表格数据，非表格页面返回 None
+    从 PaddleOCR 3.x 或 PaddleOCRVL 识别结果中提取表格数据，非表格页面返回 None
     
     处理流程：
-    1. 兼容性处理：支持 PaddleOCR 3.x OCRResult 对象和列表格式
+    1. 兼容性处理：支持 PaddleOCR 3.x OCRResult 对象、列表格式和 PaddleOCRVL 结果
     2. 数据提取：从结果中分离文本列表和边界框坐标列表
     3. 表格重建：调用 reconstruct_table() 算法尝试识别表格结构
     4. 结果筛选：只返回包含有效表格的页面数据
     
     Args:
-        result: PaddleOCR 3.x 识别结果，格式为：
+        result: PaddleOCR 3.x 或 PaddleOCRVL 识别结果，格式为：
             - OCRResult 对象：包含 rec_texts, rec_boxes, rec_scores 等属性
             - 列表格式：[OCRResult] 或传统格式兼容
+            - PaddleOCRVL 结果：包含 ocr_texts, layout_res 等字段
         page_num (int): PDF 页码，从 1 开始编号
     
     Returns:
@@ -347,10 +417,11 @@ def extract_pdf_ocr_data(result, page_num):
             
         如果未检测到表格，返回 None（该页将被过滤）
     
-    PaddleOCR 3.x 兼容性说明：
+    兼容性说明：
         - PaddleOCR 3.x 返回 OCRResult 对象（包含 rec_texts, rec_boxes, rec_scores 等属性）
+        - PaddleOCRVL 返回包含 ocr_texts, layout_res 等字段的字典
         - 使用统一的 predict() 接口，结果结构更清晰
-        - 本函数使用 hasattr() 自动检测并兼容不同格式
+        - 本函数使用 hasattr() 和字段检查自动检测并兼容不同格式
     
     示例：
         >>> result = ocr.predict('page1.png')
@@ -369,8 +440,32 @@ def extract_pdf_ocr_data(result, page_num):
     if isinstance(result, list) and len(result) > 0:
         item = result[0]  # 获取第一个元素
         
+        # 检查是否是 VL 结果
+        if isinstance(item, dict) and ('ocr_texts' in item or 'layout_res' in item):
+            # 从 VL 结果提取文本和边界框
+            ocr_texts = item.get('ocr_texts', [])
+            if ocr_texts and isinstance(ocr_texts, list):
+                for text_item in ocr_texts:
+                    if isinstance(text_item, dict):
+                        text = text_item.get('text', '')
+                        bbox = text_item.get('bbox', [])
+                        if text:
+                            rec_texts.append(text)
+                            rec_boxes.append(bbox)
+            
+            # 如果没有 ocr_texts，尝试 layout_res
+            if not rec_texts:
+                layout_res = item.get('layout_res', [])
+                if layout_res and isinstance(layout_res, list):
+                    for block in layout_res:
+                        if isinstance(block, dict):
+                            text = block.get('text', '')
+                            bbox = block.get('bbox', [])
+                            if text:
+                                rec_texts.append(text)
+                                rec_boxes.append(bbox)
         # 尝试作为对象访问属性（OCRResult 对象）
-        if hasattr(item, 'rec_texts') and hasattr(item, 'rec_boxes'):
+        elif hasattr(item, 'rec_texts') and hasattr(item, 'rec_boxes'):
             rec_texts = getattr(item, 'rec_texts', []) or []
             rec_boxes = getattr(item, 'rec_boxes', []) or []
             # 确保是列表类型
@@ -440,8 +535,8 @@ def process_pdf(pdf_path: str, detection_model: Optional[str] = None, recognitio
 @router.get('/predict-by-url', response_model=RestfulModel, summary="识别PDF URL")
 async def predict_pdf_by_url(
     pdf_url: str,
-    detection_model: Optional[str] = Query(None, description="检测模型"),
-    recognition_model: Optional[str] = Query(None, description="识别模型")
+    detection_model: Optional[str] = Query(None, description="检测模型 (PP-OCRv5_server_det, PP-OCRv5_mobile_det, PP-OCRv4_server_det, PP-OCRv4_mobile_det, PaddleOCR-VL-1.5, PaddleOCR-VL)"),
+    recognition_model: Optional[str] = Query(None, description="识别模型 (PP-OCRv5_server_rec, PP-OCRv5_mobile_rec, PP-OCRv4_server_rec, PP-OCRv4_mobile_rec, PaddleOCR-VL-1.5, PaddleOCR-VL)")
 ):
     """
     通过 URL 下载并识别 PDF 文件中的表格数据
@@ -565,8 +660,8 @@ async def predict_pdf_by_url(
 @router.post('/predict-by-file', response_model=RestfulModel, summary="识别上传的PDF文件")
 async def predict_pdf_by_file(
     file: UploadFile,
-    detection_model: Optional[str] = Query(None, description="检测模型"),
-    recognition_model: Optional[str] = Query(None, description="识别模型")
+    detection_model: Optional[str] = Query(None, description="检测模型 (PP-OCRv5_server_det, PP-OCRv5_mobile_det, PP-OCRv4_server_det, PP-OCRv4_mobile_det, PaddleOCR-VL-1.5, PaddleOCR-VL)"),
+    recognition_model: Optional[str] = Query(None, description="识别模型 (PP-OCRv5_server_rec, PP-OCRv5_mobile_rec, PP-OCRv4_server_rec, PP-OCRv4_mobile_rec, PaddleOCR-VL-1.5, PaddleOCR-VL)")
 ):
     """
     上传 PDF 文件并识别其中的表格数据
