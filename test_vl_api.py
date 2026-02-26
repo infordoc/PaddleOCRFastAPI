@@ -10,9 +10,15 @@ through the detection_model and recognition_model parameters.
 Usage:
     python test_vl_api.py
     
+Important:
+    PaddleOCR-VL models require additional dependencies:
+    pip install 'paddlex[ocr]'
+    
+    Without these dependencies, VL models will return a 501 error.
+    
 Note:
     This test demonstrates the API usage patterns with VL models.
-    Actual inference requires PaddleOCR-VL models to be installed.
+    Actual inference requires PaddleOCR-VL models and dependencies to be installed.
 """
 
 import json
@@ -341,12 +347,14 @@ def main():
     print("测试说明完成")
     print("="*70)
     print("\n要实际测试 VL 模型:")
-    print("  1. 确保安装了 PaddleOCR 3.4.0+")
-    print("  2. 启动服务: uvicorn main:app --host 0.0.0.0")
-    print("  3. 访问 Swagger UI: http://localhost:8000/docs")
-    print("  4. 在任何端点的 detection_model 或 recognition_model 参数中")
+    print("  1. 安装额外的依赖: pip install 'paddlex[ocr]'")
+    print("  2. 确保安装了 PaddleOCR 3.4.0+")
+    print("  3. 启动服务: uvicorn main:app --host 0.0.0.0")
+    print("  4. 访问 Swagger UI: http://localhost:8000/docs")
+    print("  5. 在任何端点的 detection_model 或 recognition_model 参数中")
     print("     输入 'PaddleOCR-VL-1.5' 或 'PaddleOCR-VL'")
-    print("  5. 首次使用会自动下载模型文件（约 2GB）")
+    print("  6. 首次使用会自动下载模型文件（约 2GB）")
+    print("\n⚠️  重要: 如果没有安装 paddlex[ocr]，将收到 501 错误")
     print("\n")
 
 

@@ -23,7 +23,7 @@ A simple way to deploy `PaddleOCR` based on `FastAPI`.
 
 - [x] **PaddleOCR 3.x** with PP-OCRv5 models for enhanced accuracy
 - [x] **PaddlePaddle 3.0+** compatibility with optimized performance
-- [x] **PaddleOCR-VL support** - Optional multimodal vision-language models for advanced document analysis
+- [x] **PaddleOCR-VL support** - Optional multimodal vision-language models for advanced document analysis ⚠️ *Requires additional dependencies: `pip install 'paddlex[ocr]'`*
   - 111 language support
   - Automatic layout detection
   - Complex table recognition
@@ -38,6 +38,8 @@ A simple way to deploy `PaddleOCR` based on `FastAPI`.
 - [x] Model selection support (PP-OCRv4, PP-OCRv5, PaddleOCR-VL)
 
 > 📖 **See [PaddleOCR-VL Integration Guide](PADDLEOCR_VL_GUIDE.md)** for detailed documentation on using VL models
+> 
+> ⚠️ **VL Models Requirement**: To use PaddleOCR-VL models, install additional dependencies: `pip install 'paddlex[ocr]'`
 
 ## Deployment Methods
 

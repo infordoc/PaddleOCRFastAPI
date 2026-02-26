@@ -4,6 +4,34 @@
 
 This document describes the integration of PaddleOCR-VL (Vision-Language) models into the PaddleOCRFastAPI endpoints. The integration adds optional support for advanced multimodal OCR capabilities while maintaining full backward compatibility with existing PP-OCR models.
 
+## ⚠️ Important: Additional Dependencies Required
+
+**PaddleOCR-VL models require additional dependencies that are not installed by default.** To use VL models, you must install the OCR extra dependencies:
+
+```bash
+pip install 'paddlex[ocr]'
+```
+
+Without these dependencies, attempting to use VL models will result in a `501 Not Implemented` error with a message indicating the missing dependencies.
+
+### Installation Options
+
+**For basic PaddleOCR (default):**
+```bash
+pip install -r requirements.txt
+```
+
+**To add VL model support:**
+```bash
+pip install 'paddlex[ocr]'
+```
+
+**Or install everything together:**
+```bash
+pip install -r requirements.txt
+pip install 'paddlex[ocr]'
+```
+
 ## What are PaddleOCR-VL Models?
 
 PaddleOCR-VL models are multimodal vision-language models that combine visual understanding with natural language processing to provide advanced document analysis capabilities.
@@ -370,6 +398,22 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 5. **Upload file and execute**
 
 ## Troubleshooting
+
+### Issue: Missing Dependencies Error (501 Not Implemented)
+
+**Error Message**: 
+```
+PaddleOCR-VL requires additional dependencies. Install with: pip install 'paddlex[ocr]'
+```
+
+**Cause**: PaddleOCR-VL models require additional dependencies that are not installed by default.
+
+**Solution**: 
+```bash
+pip install 'paddlex[ocr]'
+```
+
+Then restart the server. The VL models will be available after installation.
 
 ### Issue: Models Not Downloading
 

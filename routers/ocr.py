@@ -74,25 +74,41 @@ def get_ocr_instance(detection_model: Optional[str] = None, recognition_model: O
             return _ocr_instances[cache_key]
         
         # 创建 PaddleOCRVL 实例
-        from paddleocr import PaddleOCRVL
-        
-        ocr_instance = PaddleOCRVL(
-            pipeline_version=vl_version,
-            device=os.environ.get("OCR_DEVICE", "cpu"),
-            use_layout_detection=True,
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_chart_recognition=True,
-            use_seal_recognition=True,
-            use_ocr_for_image_block=True,
-            format_block_content=True,
-            merge_layout_blocks=True,
-        )
-        
-        # 缓存实例
-        _ocr_instances[cache_key] = ocr_instance
-        
-        return ocr_instance
+        try:
+            from paddleocr import PaddleOCRVL
+            
+            ocr_instance = PaddleOCRVL(
+                pipeline_version=vl_version,
+                device=os.environ.get("OCR_DEVICE", "cpu"),
+                use_layout_detection=True,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_chart_recognition=True,
+                use_seal_recognition=True,
+                use_ocr_for_image_block=True,
+                format_block_content=True,
+                merge_layout_blocks=True,
+            )
+            
+            # 缓存实例
+            _ocr_instances[cache_key] = ocr_instance
+            
+            return ocr_instance
+        except ImportError as e:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail=f"PaddleOCR-VL model is not available. Please install required dependencies: pip install 'paddlex[ocr]'. Error: {str(e)}"
+            )
+        except RuntimeError as e:
+            if "dependency error" in str(e).lower():
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail="PaddleOCR-VL requires additional dependencies. Install with: pip install 'paddlex[ocr]'"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to initialize PaddleOCR-VL model: {str(e)}"
+            )
     else:
         # 使用默认模型 - Server 版本更准确
         if not detection_model:
