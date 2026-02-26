@@ -63,8 +63,8 @@ def get_ocr_instance(detection_model: Optional[str] = None, recognition_model: O
     use_vl = is_vl_model(detection_model) or is_vl_model(recognition_model)
     
     if use_vl:
-        # 确定使用哪个 VL 版本
-        vl_version = "v1.5" if "1.5" in (detection_model or recognition_model or "") else "v1"
+        # 确定使用哪个 VL 版本 - 检查两个参数中是否包含 "1.5"
+        vl_version = "v1.5" if ("1.5" in (detection_model or "") or "1.5" in (recognition_model or "")) else "v1"
         
         # 创建缓存键
         cache_key = f"VL_{vl_version}_{OCR_LANGUAGE}"
