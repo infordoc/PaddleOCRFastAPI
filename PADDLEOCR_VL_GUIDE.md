@@ -27,15 +27,18 @@ The Docker images automatically include `paddlex[ocr]` dependencies, so VL model
 
 **Install all dependencies (including VL support):**
 ```bash
-pip install -r requirements.txt  # Includes paddlex[ocr] by default
+pip install -r requirements.txt  # Includes paddlex[ocr]>=3.4.0 by default
 ```
 
 **Manual installation of just VL dependencies:**
 ```bash
-pip install 'paddlex[ocr]'
+pip install 'paddlex[ocr]>=3.4.0'
 ```
 
-**Note**: As of this version, `requirements.txt` includes VL dependencies by default. To exclude VL dependencies, install packages individually from `requirements.in` (excluding the `paddlex[ocr]` line).
+**To install without VL dependencies** (traditional models only), install base packages manually:
+```bash
+pip install fastapi uvicorn python-multipart paddlepaddle>=3.0.0 paddleocr>=3.0.0 requests numpy opencv-python 'PyMuPDF>=1.23.0'
+```
 
 Without these dependencies, attempting to use VL models will result in a `501 Not Implemented` error with a message indicating the missing dependencies.
 

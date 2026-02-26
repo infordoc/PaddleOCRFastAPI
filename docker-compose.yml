@@ -65,7 +65,7 @@ services:
       resources:
         limits:
           cpus: '3.0'      # Maximum CPU cores
-          memory: 8G       # Maximum RAM (VL models need ~4-6GB + overhead for stability)
+          memory: 10G      # Maximum RAM (VL models need ~4-6GB + 2-4GB overhead)
         reservations:
           cpus: '0.5'      # Minimum CPU cores
           memory: 2G       # Minimum RAM

@@ -10,7 +10,7 @@ paddleocr>=3.0.0
 
 # PaddleX with OCR support (required for PaddleOCR-VL models)
 # This adds support for VL multimodal models
-paddlex[ocr]
+paddlex[ocr]>=3.4.0
 
 # Core dependencies
 requests
