@@ -118,12 +118,15 @@ def get_pdf_ocr(detection_model: Optional[str] = None, recognition_model: Option
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
                 detail=f"PaddleOCR-VL model is not available. Please install required dependencies: pip install 'paddlex[ocr]'. Error: {str(e)}"
             )
-        except RuntimeError as e:
-            if "dependency error" in str(e).lower():
+        except Exception as e:
+            # Catch RuntimeError and other exceptions from PaddleOCR-VL initialization
+            error_msg = str(e).lower()
+            if "dependency" in error_msg or "paddlex[ocr]" in error_msg or "require" in error_msg:
                 raise HTTPException(
                     status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                    detail="PaddleOCR-VL requires additional dependencies. Install with: pip install 'paddlex[ocr]'"
+                    detail=f"PaddleOCR-VL requires additional dependencies. Install with: pip install 'paddlex[ocr]'. Error: {str(e)}"
                 )
+            # Re-raise other exceptions as internal server errors
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to initialize PaddleOCR-VL model: {str(e)}"
