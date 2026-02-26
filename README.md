@@ -23,12 +23,13 @@ A simple way to deploy `PaddleOCR` based on `FastAPI`.
 
 - [x] **PaddleOCR 3.x** with PP-OCRv5 models for enhanced accuracy
 - [x] **PaddlePaddle 3.0+** compatibility with optimized performance
-- [x] **PaddleOCR-VL support** - Optional multimodal vision-language models for advanced document analysis ⚠️ *Requires additional dependencies: `pip install 'paddlex[ocr]'`*
+- [x] **PaddleOCR-VL support** - Optional multimodal vision-language models for advanced document analysis
   - 111 language support
   - Automatic layout detection
   - Complex table recognition
   - Formula and chart recognition
   - Seal and stamp recognition
+  - **✅ Docker images include VL dependencies by default**
 - [x] Local path image recognition
 - [x] Base64 data recognition
 - [x] Upload file recognition
@@ -39,9 +40,26 @@ A simple way to deploy `PaddleOCR` based on `FastAPI`.
 
 > 📖 **See [PaddleOCR-VL Integration Guide](PADDLEOCR_VL_GUIDE.md)** for detailed documentation on using VL models
 > 
-> ⚠️ **VL Models Requirement**: To use PaddleOCR-VL models, install additional dependencies: `pip install 'paddlex[ocr]'`
+> ✅ **Docker Deployment**: VL dependencies are pre-installed in Docker images. For local installation, `requirements.txt` now includes `paddlex[ocr]`.
 
 ## Deployment Methods
+
+### Docker Deployment (Recommended for VL Models)
+
+The Docker setup includes all dependencies for both traditional PP-OCR and VL models.
+
+**Quick Start with Docker Compose:**
+```shell
+docker-compose up -d
+```
+
+**Benefits:**
+- ✅ All VL dependencies (`paddlex[ocr]`) pre-installed
+- ✅ Persistent model cache across restarts
+- ✅ Resource limits optimized for VL models
+- ✅ Health checks and auto-restart
+
+See [Docker Deployment](#docker-deployment) section below for detailed configuration.
 
 ### Deploy Directly
 
@@ -59,6 +77,8 @@ A simple way to deploy `PaddleOCR` based on `FastAPI`.
    ```shell
    pip3 install -r requirements.txt
    ```
+   
+   > **Note**: `requirements.txt` now includes `paddlex[ocr]` for VL model support.
 
 4. Run FastAPI
 

@@ -8,6 +8,10 @@ python-multipart
 paddlepaddle>=3.0.0
 paddleocr>=3.0.0
 
+# PaddleX with OCR support (required for PaddleOCR-VL models)
+# This adds support for VL multimodal models
+paddlex[ocr]
+
 # Core dependencies
 requests
 numpy

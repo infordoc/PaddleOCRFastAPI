@@ -38,12 +38,20 @@ services:
       
       # Force CPU usage (GPU not supported in this build)
       - USE_GPU=false
+      
+      # Optional: Disable model source connectivity check for faster startup
+      # Uncomment to skip model hoster connectivity checks
+      # - PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
     
     # Volume mounts
     volumes:
       # Model cache - PaddleOCR 3.x stores models here
       # This persists models between container restarts
       - paddleocr_models:/root/.paddleocr
+      
+      # PaddleX model cache for VL models
+      # VL models (PaddleOCR-VL-1.5, PaddleOCR-VL) are stored here
+      - paddlex_models:/root/.paddlex
       
       # Optional: Upload directory (uncomment if needed)
       # - ./uploads:/app/uploads
@@ -52,14 +60,15 @@ services:
       # - ./output:/app/output
     
     # Resource limits (adjust based on your server capacity)
+    # NOTE: VL models require more resources than traditional models
     deploy:
       resources:
         limits:
           cpus: '3.0'      # Maximum CPU cores
-          memory: 6G       # Maximum RAM (PaddleOCR needs ~2-3GB)
+          memory: 8G       # Maximum RAM (VL models need ~4-6GB, traditional ~2-3GB)
         reservations:
           cpus: '0.5'      # Minimum CPU cores
-          memory: 1G       # Minimum RAM
+          memory: 2G       # Minimum RAM
     
     # Health check
     healthcheck:
@@ -82,6 +91,11 @@ volumes:
     #   type: none
     #   device: /path/on/host/paddleocr_models
     #   o: bind
+  
+  paddlex_models:
+    driver: local
+    # PaddleX models for VL (Vision-Language) models
+    # VL models are larger (~2GB) and stored separately
 
 # Optional: Custom network
 # networks:

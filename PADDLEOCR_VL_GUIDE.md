@@ -6,31 +6,42 @@ This document describes the integration of PaddleOCR-VL (Vision-Language) models
 
 ## ⚠️ Important: Additional Dependencies Required
 
-**PaddleOCR-VL models require additional dependencies that are not installed by default.** To use VL models, you must install the OCR extra dependencies:
+**PaddleOCR-VL models require additional dependencies.** The dependencies are now included in the Docker images by default, but for local installations you must install them separately.
 
+### Docker Deployment (✅ Dependencies Pre-installed)
+
+**Using Docker Compose (Recommended):**
+```bash
+docker-compose up -d
+```
+
+**Using Dockerfile:**
+```bash
+docker build -t paddleocrfastapi .
+docker run -p 8000:8000 paddleocrfastapi
+```
+
+The Docker images automatically include `paddlex[ocr]` dependencies, so VL models work out of the box.
+
+### Local Installation
+
+**For basic PaddleOCR (traditional models only):**
+```bash
+pip install -r requirements.txt
+# But note: requirements.txt now includes paddlex[ocr] by default
+```
+
+**The requirements.txt now includes VL dependencies:**
+```bash
+pip install -r requirements.txt  # Includes paddlex[ocr]
+```
+
+**Manual installation:**
 ```bash
 pip install 'paddlex[ocr]'
 ```
 
 Without these dependencies, attempting to use VL models will result in a `501 Not Implemented` error with a message indicating the missing dependencies.
-
-### Installation Options
-
-**For basic PaddleOCR (default):**
-```bash
-pip install -r requirements.txt
-```
-
-**To add VL model support:**
-```bash
-pip install 'paddlex[ocr]'
-```
-
-**Or install everything together:**
-```bash
-pip install -r requirements.txt
-pip install 'paddlex[ocr]'
-```
 
 ## What are PaddleOCR-VL Models?
 
@@ -372,6 +383,61 @@ export OCR_DEVICE=cpu  # or 'gpu'
 
 # Debug mode (default: 0)
 export OCR_DEBUG=1  # Enable verbose logging
+
+# Disable model source connectivity check (optional, speeds up startup)
+export PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+```
+
+### Docker Environment Variables
+
+When using Docker Compose, you can set these in `docker-compose.yml`:
+
+```yaml
+environment:
+  - OCR_LANGUAGE=pt
+  - OCR_DEBUG=0
+  - USE_GPU=false
+  - PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True  # Optional: faster startup
+```
+
+## Docker Deployment
+
+### Using Docker Compose (Recommended)
+
+The Docker setup now includes VL model dependencies by default:
+
+```bash
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+### Key Docker Features
+
+1. **Pre-installed Dependencies**: `paddlex[ocr]` is included in the Docker image
+2. **Persistent Model Cache**: Models are stored in volumes and persist across restarts
+   - `/root/.paddleocr` - Traditional PP-OCR models
+   - `/root/.paddlex` - VL models (PaddleOCR-VL)
+3. **Resource Limits**: Adjusted for VL models (8GB memory limit)
+4. **Health Checks**: Automatic monitoring of service health
+
+### Volume Management
+
+```bash
+# List volumes
+docker volume ls
+
+# Inspect model cache
+docker volume inspect paddleocrfastapi_paddleocr_models
+docker volume inspect paddleocrfastapi_paddlex_models
+
+# Clear model cache (if needed)
+docker-compose down -v  # WARNING: This deletes cached models
 ```
 
 ## Testing
